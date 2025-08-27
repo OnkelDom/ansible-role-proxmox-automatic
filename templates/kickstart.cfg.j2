@@ -195,7 +195,171 @@ echo "$(date): Starting post-installation configuration" >> /root/anaconda-ks-po
 {% endif %}
 /usr/bin/chmod 440 /etc/sudoers.d/user_{{ user.name }}
 {% endif %}
+
+{% if user.additional_ssh_keys is defined and user.additional_ssh_keys | length > 0 %}
+# Add additional SSH keys for user {{ user.name }}
+{%   for sshkey in user.additional_ssh_keys %}
+{%     if sshkey != "" %}
+/usr/bin/echo "{{ sshkey }}" >> /home/{{ user.name }}/.ssh/authorized_keys
+{%     endif %}
+{%   endfor %}
+{% endif %}
+
+{% if user.generate_vimcfg | default(true) %}
+# Create Vim configuration for user {{ user.name }}
+/usr/bin/cat > /home/{{ user.name }}/.vimrc << 'EOF'
+set laststatus=2 " Always display the statusline in all windows
+set showtabline=2 " Always display the tabline, even if there is only one tab
+set noshowmode " Hide the default mode text (e.g. -- INSERT -- below the statusline)
+set t_Co=256
+set tabstop=4
+set shiftwidth=4
+set expandtab
+set smartindent
+set paste
+set number
+set hlsearch
+:nmap <C-N><C-I> :set invrelativenumber<CR>
+:nmap <C-N><C-N> :set invnumber<CR>
+set laststatus=2
+set t_Co=256
+" colorscheme
+colorscheme slate
+filetype on
+filetype plugin on
+autocmd FileType yaml setlocal shiftwidth=2 tabstop=2
+autocmd FileType yml setlocal shiftwidth=2 tabstop=2
+autocmd FileType json setlocal shiftwidth=2 tabstop=2
+autocmd FileType j2 setlocal shiftwidth=2 tabstop=2
+syntax on
+" csv plugin
+hi CSVColumnEven        ctermbg=0 ctermfg=10
+hi CSVColumnOdd         ctermbg=0 ctermfg=14
+hi CSVColumnHeaderEven  ctermbg=0 ctermfg=2
+hi CSVColumnHeaderOdd   ctermbg=0 ctermfg=6
+EOF
+/usr/bin/chown {{ user.name }}:{{ user.name }} /home/{{ user.name }}/.vimrc
+{% endif %}
+
+{% if user.generate_tmuxcfg | default(true) %}
+# Create tmux configuration for user {{ user.name }}
+/usr/bin/cat > /home/{{ user.name }}/.tmux.conf << 'EOF'
+# last active window
+bind-key C-a last-window
+# Bind function keys to select windows
+# -n means - no need to press ^B first.
+bind 1 select-window -t 1
+bind 2 select-window -t 2
+bind 3 select-window -t 3
+bind 4 select-window -t 4
+bind 5 select-window -t 5
+bind 6 select-window -t 6
+bind 7 select-window -t 7
+bind 8 select-window -t 8
+bind 9 select-window -t 9
+bind 0 select-window -t 10
+# bind meta-cursor to select-pane
+bind -n M-Up select-pane -U
+bind -n M-Down select-pane -D
+bind -n M-Left select-pane -L
+bind -n M-Right select-pane -R
+# | and - for pane splitting
+unbind % # Remove default binding since we�re replacing
+bind | split-window -h
+# of course this looses "delete buffer"
+bind - split-window -v
+# and synchronize (global input)
+bind g set-window-option synchronize-panes
+# open multi-ssh to somewhere (see my ms binary)
+bind S command-prompt -p "Multi-SSH Target: " "split-window -d 'exec bash -c \"~/.ms.sh %1\"'"
+# new-window with command
+bind C command-prompt -p "Command: " "new-window -n %1 'exec %1'"
+# ctrl+c to send to clipboard
+bind C-c run "tmux save-buffer - | xclip -i -sel clipboard"
+# ctrl+v to paste from clipboard
+bind C-v run "tmux set-buffer \"$/xclip -o -sel clipboard)\"; tmux paste-buffer"
+# reload the config
+bind R source-file ~/.tmux.conf \; display-message "tmux.conf reloaded!"
+# confirm before killing a window or the server
+bind-key k confirm kill-window
+# open a man page in new window
+bind / command-prompt "split-window 'exec man %%'"
+# Less ugly key for the copy mode
+bind-key Escape copy-mode -u
+# Start window numbering at 1
+set -g base-index 1
+# Like base-index, but set the starting index for pane numbers.
+set-window-option -g pane-base-index 1
+# No delay in command sequences
+set -s escape-time 0
+# Rather than constraining window size to the maximum size of any client
+# connected to the *session*, constrain window size to the maximum size of any
+# client connected to *that window*. Much more reasonable.
+setw -g aggressive-resize on
+# Activity monitoring
+set -g visual-activity on
+# I like Bash
+set-option -g default-command "/bin/bash -l"
+set-option -g default-shell /bin/bash
+# Set the number of error or information messages to save in the message
+# log for each client.  The default is 20.
+set -g message-limit 100
+# listen for activity on all windows
+set -g bell-action any
+# Set the maximum number of lines held in window history.
+# This setting applies only to new windows - existing window
+# histories are not resized and retain the limit at the point
+# they were created.
+set -g history-limit 100000
+# don't rename windows automatically
+set-option -g allow-rename off
+# Enable mouse support
+set -g mouse off
+# Set vi as the default editor
+set -g status-keys vi
+# set default terminal screen color
+set -g default-terminal "screen-256color"
+EOF
+/usr/bin/chown {{ user.name }}:{{ user.name }} /home/{{ user.name }}/.tmux.conf
+
+# Create .ms.sh in userhome for multi-ssh
+/usr/bin/cat > /home/{{ user.name }}/.ms.sh << 'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+  echo "Usage: $0 host1 [host2 host3 ...]" >&2
+  exit 1
+fi
+
+first="$1"; shift
+
+# Neues Fenster mit erstem Host, Pane-ID exakt ausgeben
+pane_id="$(tmux new-window -P -F "#{pane_id}" -n "${first}" "ssh ${first}")"
+# Window-ID zu diesem Pane bestimmen
+win_id="$(tmux display-message -p -t "${pane_id}" "#{window_id}")"
+
+tmux select-window -t "${win_id}"
+
+# Weitere Hosts in neue Panes splitten
+for host in "$@"; do
+  tmux split-window -P -t "${win_id}" -F "#{pane_id}" -d "ssh ${host}" >/dev/null
+  tmux select-layout -t "${win_id}" tiled >/dev/null
+done
+
+# Panes synchronisieren, Layout sauber setzen und ersten Pane fokussieren
+tmux set-window-option -t "${win_id}" synchronize-panes on
+tmux select-layout -t "${win_id}" tiled >/dev/null
+
+first_pane="$(tmux list-panes -t "${win_id}" -F "#{pane_id}" | head -n1)"
+tmux select-pane -t "${first_pane}"
+EOF
+/usr/bin/chmod +x /home/{{ user.name }}/.ms.sh
+/usr/bin/chown {{ user.name }}:{{ user.name }} /home/{{ user.name }}/.ms.sh
+
+{% endif %}
 {% endfor %}
+
 
 # Create msmtp configuration for sending emails
 /usr/bin/cat > /etc/msmtprc << 'EOF'
@@ -355,6 +519,90 @@ stdin_format = To: {email_to}\nFrom: {email_from}\nSubject: {subject}\n\n{body}
 EOF
 /usr/bin/systemctl enable --now dnf-automatic.timer
 {% endif %}
+
+# configure /etc/profile.d/ssh-agent.sh to start ssh-agent on login
+cat > /etc/profile.d/ssh-agent.sh << 'EOF'
+# Prüfen, ob die Shell interaktiv ist
+if [[ $- == *i* ]]; then
+    if [ -z "$SSH_AUTH_SOCK" ]; then
+        # Prüfen, ob bereits ein ssh-agent läuft
+        if ! pgrep -u "$USER" ssh-agent > /dev/null; then
+            eval $(ssh-agent) > /dev/null
+        fi
+        ssh-add -l > /dev/null || alias ssh='ssh-add -l > /dev/null || ssh-add && unalias ssh; ssh'
+    fi
+fi
+EOF
+chmod +x /etc/profile.d/ssh-agent.sh
+
+# configre /etc/profile.d/git-prompt.sh
+cat > /etc/profile.d/git-prompt.sh << 'EOF'
+# ===================[ Erweiterter Bash Prompt mit Git-Status ]===================
+
+# Farben für PS1 (Bash-escaped)
+PS1_RESET="\[\e[0m\]"
+PS1_RED="\[\e[0;31m\]"
+PS1_GREEN="\[\e[0;32m\]"
+PS1_YELLOW="\[\e[0;33m\]"
+PS1_BLUE="\[\e[0;34m\]"
+PS1_LIGHTBLUE="\[\e[1;34m\]"
+PS1_CYAN="\[\e[0;36m\]"
+
+# Git-Status ohne \[ \], aber mit ANSI
+parse_git_branch() {
+  git rev-parse --is-inside-work-tree &>/dev/null || return
+
+  local branch ahead behind
+  local staged=0 unstaged=0 untracked=0 conflict=0
+
+  branch=$(git symbolic-ref --short HEAD 2>/dev/null || git describe --tags --exact-match 2>/dev/null)
+
+  while IFS= read -r line; do
+    case "$line" in
+      M*|A*|D*|R*|C*) ((staged++)) ;;
+      *M) ((unstaged++)) ;;
+      \?\?*) ((untracked++)) ;;
+      UU*) ((conflict++)) ;;
+    esac
+  done < <(git status --porcelain 2>/dev/null)
+
+  if git rev-parse --abbrev-ref --symbolic-full-name @{u} &>/dev/null; then
+    ahead=$(git rev-list --count @{u}..HEAD 2>/dev/null)
+    behind=$(git rev-list --count HEAD..@{u} 2>/dev/null)
+  fi
+
+  local result=" (\033[0;33m${branch}\033[0m"
+  [[ "$ahead" -gt 0 ]]    && result+="\033[0;36m⇡${ahead}\033[0m"
+  [[ "$behind" -gt 0 ]]   && result+="\033[0;36m⇣${behind}\033[0m"
+  [[ "$staged" -gt 0 ]]   && result+="\033[0;32m+\033[0m"
+  [[ "$unstaged" -gt 0 ]] && result+="\033[0;31m~\033[0m"
+  [[ "$untracked" -gt 0 ]] && result+="\033[0;33m?\033[0m"
+  [[ "$conflict" -gt 0 ]] && result+="\033[0;31m⧉\033[0m"
+  result+=")"
+
+  printf "%b" "$result"
+}
+
+# Prompt setzen mit parse_git_branch korrekt eingebunden
+set_bash_prompt() {
+  local user_color exit_str=""
+  [[ $EUID -eq 0 ]] && user_color="${PS1_RED}" || user_color="${PS1_GREEN}"
+
+  # Zeit und Datum
+  local now="\$(date +'%F %T')"  # z. B. "2025-03-26 14:30:12"
+  local now_str="${PS1_YELLOW}[${now}]${PS1_RESET}"
+
+  # Exit-Code (nur wenn != 0)
+  local last_exit=$?
+  if [[ $last_exit -ne 0 ]]; then
+    exit_str="${PS1_RED}✖${last_exit}${PS1_RESET} "
+  fi
+
+  PS1="${now_str} ${exit_str}${user_color}\u${PS1_RESET}@${PS1_LIGHTBLUE}\h${PS1_RESET}:${PS1_CYAN}\w${PS1_RESET}\$(parse_git_branch)\n\$ "
+}
+
+PROMPT_COMMAND=set_bash_prompt
+EOF
 
 
 # Log completion of post-installation

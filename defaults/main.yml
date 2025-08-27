@@ -36,10 +36,11 @@ proxmox_automatic_smtp_root: "<fillme>"
 proxmox_automatic_host_description: "Managed by Ansible"
 proxmox_automatic_host_responsible: "admin@example.com"
 
-proxmox_automatic_additional_hosts:
-  - ip: "192.168.1.20"
-    hostname: "database01.example.com"
-    comment: "Database Server"
+proxmox_automatic_additional_hosts: []
+# Example:
+#  - ip: "192.168.1.20"
+#    hostname: "database01.example.com"
+#    comment: "Database Server"
 
 proxmox_automatic_sysctl_settings:
   net.ipv4.ip_forward: 1
@@ -85,10 +86,19 @@ proxmox_automatic_users:
     fullname: "Administrator"
     shell: "/bin/bash"
     state: "present"
+    uid: 1000
+    gid: 1000
+    groups: ["wheel"]
     system_account: false
     password: "<filleme>"
-    authorized_keys:
-      - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC3..."
+    sudo_commands: "NOPASSWD: ALL"  # NOPASSWD: ALL, or specific commands like "/bin/systemctl, /usr/bin/docker"
+    sudo_nopasswd: true
+    ssh_key: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC3..."
+    additional_ssh_keys: []
+    generate_vimcfg: true
+    generate_tmuxcfg: true
+    email: "mail@local.host"
+    additional_ssh_keys: []
 
 proxmox_automatic_url_baseos: ""
 proxmox_automatic_url_mirrorlist: "http://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=BaseOS-9"
