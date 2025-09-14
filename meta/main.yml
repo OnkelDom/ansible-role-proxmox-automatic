@@ -2,47 +2,47 @@
 dependencies: []
 
 galaxy_info:
-  role_name: proxmox_automatic
-  namespace: inframonks
-  author: Dominik Lenhardt <dominik.lenhardt@inframonks.com>
+  author: Dominik Lenhardt <dominik@lenhardt-it.com>
+  company: Dominik Lenhardt IT-Services
   description: Automatically create VMs on Proxmox VE with custom Kickstart configurations
-  company: InfraMonks GmbH
-  license: MIT
-  min_ansible_version: "2.10"
-  platforms:
-    - name: EL
-      versions:
-        - "8"
-        - "9"
-    - name: Rocky
-      versions:
-        - all
-    - name: Fedora
-      versions:
-        - all
-    - name: Ubuntu
-      versions:
-        - focal
-        - jammy
-    - name: Debian
-      versions:
-        - bullseye
-        - bookworm
-    - name: MacOSX
-      versions:
-        - all
   galaxy_tags:
-    - proxmox
-    - virtualization
-    - automation
-    - kickstart
-    - vm
-    - infrastructure
-    - cloud
-    - linux
-    - rocky
-    - rhel
-    - os
-    - autoinstall
-    - kvm
-    - qemu
+  - proxmox
+  - virtualization
+  - automation
+  - kickstart
+  - vm
+  - infrastructure
+  - cloud
+  - linux
+  - rocky
+  - rhel
+  - os
+  - autoinstall
+  - kvm
+  - qemu
+  license: MIT
+  min_ansible_version: '2.10'
+  namespace: lenhardt-its
+  platforms:
+  - name: EL
+    versions:
+    - '8'
+    - '9'
+  - name: Rocky
+    versions:
+    - all
+  - name: Fedora
+    versions:
+    - all
+  - name: Ubuntu
+    versions:
+    - focal
+    - jammy
+  - name: Debian
+    versions:
+    - bullseye
+    - bookworm
+  - name: MacOSX
+    versions:
+    - all
+  role_name: proxmox-automatic
