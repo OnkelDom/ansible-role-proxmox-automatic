@@ -187,25 +187,25 @@
     - proxmox_automatic_create_kickstart
     - proxmox_automatic_create_vm
 
-- name: "Kickstart ISO erstellen und hochladen"
+- name: "Create and upload Kickstart ISO"
   ansible.builtin.import_tasks: create_kickstart.yml
   tags:
     - proxmox_automatic_create_kickstart
     - proxmox_automatic
 
-- name: "VM Pools sicherstellen"
+- name: "Ensure VM pools exist"
   ansible.builtin.import_tasks: create_pools.yml
   tags:
     - proxmox_automatic_pools
     - proxmox_automatic
 
-- name: "HA-Gruppen sicherstellen"
+- name: "Ensure HA groups exist"
   ansible.builtin.import_tasks: create_ha_groups.yml
   tags:
     - proxmox_automatic_ha
     - proxmox_automatic
 
-- name: "VMs auf Proxmox erstellen"
+- name: "Create VMs on Proxmox"
   ansible.builtin.import_tasks: create_vm.yml
   tags:
     - proxmox_automatic_create_vm

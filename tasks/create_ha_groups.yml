@@ -18,7 +18,7 @@
     api_password: "{{ proxmox_automatic_api_password }}"
     api_token_id: "{{ proxmox_automatic_api_token_id | default(omit) }}"
     api_token_secret: "{{ proxmox_automatic_api_token_secret | default(omit) }}"
-    validate_certs: "{{ proxmox_automatic_api_validate_certs | default(true) }}"
+    validate_certs: "{{ proxmox_automatic_api_validate_certs | default(false) }}"
     name: "ha-group-{{ item | regex_replace('\\..*$', '') }}"
     nodes: >-
       {{
@@ -48,7 +48,7 @@
     api_password: "{{ proxmox_automatic_api_password }}"
     api_token_id: "{{ proxmox_automatic_api_token_id | default(omit) }}"
     api_token_secret: "{{ proxmox_automatic_api_token_secret | default(omit) }}"
-    validate_certs: "{{ proxmox_automatic_api_validate_certs | default(true) }}"
+    validate_certs: "{{ proxmox_automatic_api_validate_certs | default(false) }}"
     name: "{{ proxmox_automatic_ha_group }}"
     nodes: "{{ proxmox_automatic_ha_group_nodes }}"
     nofailback: "{{ proxmox_automatic_ha_group_nofailback }}"

@@ -29,6 +29,11 @@ options:
     description: API token secret.
     required: false
     type: str
+  validate_certs:
+    description: Verify SSL certificate.
+    required: false
+    type: bool
+    default: false
   storage:
     description: Target storage where ISO should be uploaded.
     required: true
@@ -48,14 +53,14 @@ options:
 ''' 
 
 
-def upload_iso(module, api_host, node, storage, iso_path, iso_name, headers):
+def upload_iso(module, api_host, node, storage, iso_path, iso_name, headers, validate_certs):
     url = f"https://{api_host}:8006/api2/json/nodes/{node}/storage/{storage}/upload"
     files = {
         'content': (None, 'iso'),
         'filename': (iso_name, open(iso_path, 'rb'), 'application/octet-stream')
     }
     
-    response = requests.post(url, headers=headers, files=files, verify=False)
+    response = requests.post(url, headers=headers, files=files, verify=validate_certs)
     
     if response.status_code == 200:
         return {'changed': True, 'msg': 'ISO upload successful', 'response': response.json()}
@@ -70,6 +75,7 @@ def main():
         'api_password': {'type': 'str', 'required': False, 'no_log': True},
         'api_token_id': {'type': 'str', 'required': False},
         'api_token_secret': {'type': 'str', 'required': False, 'no_log': True},
+        'validate_certs': {'type': 'bool', 'required': False, 'default': False},
         'storage': {'type': 'str', 'required': True},
         'node': {'type': 'str', 'required': True},
         'iso_path': {'type': 'str', 'required': True},
@@ -83,6 +89,7 @@ def main():
     storage = module.params['storage']
     iso_path = module.params['iso_path']
     iso_name = module.params['iso_name']
+    validate_certs = module.params['validate_certs']
     
     if not os.path.isfile(iso_path):
         module.fail_json(msg=f"ISO file not found: {iso_path}")
@@ -93,7 +100,7 @@ def main():
     elif module.params['api_user'] and module.params['api_password']:
         auth_url = f"https://{api_host}:8006/api2/json/access/ticket"
         auth_data = {'username': module.params['api_user'], 'password': module.params['api_password']}
-        response = requests.post(auth_url, data=auth_data, verify=False)
+        response = requests.post(auth_url, data=auth_data, verify=validate_certs)
         if response.status_code != 200:
             module.fail_json(msg="Failed to authenticate with Proxmox API", response=response.text)
         token = response.json()['data']['ticket']
@@ -101,7 +108,7 @@ def main():
     else:
         module.fail_json(msg="Either API token or username/password must be provided.")
     
-    result = upload_iso(module, api_host, node, storage, iso_path, iso_name, headers)
+    result = upload_iso(module, api_host, node, storage, iso_path, iso_name, headers, validate_certs)
     module.exit_json(**result)
 
 if __name__ == '__main__':

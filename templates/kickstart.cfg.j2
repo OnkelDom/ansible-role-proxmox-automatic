@@ -382,7 +382,7 @@ for host in "$@"; do
   tmux select-layout -t "${win_id}" tiled >/dev/null
 done
 
-# Panes synchronisieren, Layout sauber setzen und ersten Pane fokussieren
+# Synchronize panes, set layout cleanly and focus first pane
 tmux set-window-option -t "${win_id}" synchronize-panes on
 tmux select-layout -t "${win_id}" tiled >/dev/null
 
@@ -566,10 +566,10 @@ EOF
 
 # configure /etc/profile.d/ssh-agent.sh to start ssh-agent on login
 cat > /etc/profile.d/ssh-agent.sh << 'EOF'
-# Prüfen, ob die Shell interaktiv ist
+# Check if the shell is interactive
 if [[ $- == *i* ]]; then
     if [ -z "$SSH_AUTH_SOCK" ]; then
-        # Prüfen, ob bereits ein ssh-agent läuft
+        # Check if ssh-agent is already running
         if ! pgrep -u "$USER" ssh-agent > /dev/null; then
             eval $(ssh-agent) > /dev/null
         fi
@@ -581,9 +581,9 @@ chmod +x /etc/profile.d/ssh-agent.sh
 
 # configre /etc/profile.d/git-prompt.sh
 cat > /etc/profile.d/git-prompt.sh << 'EOF'
-# ===================[ Erweiterter Bash Prompt mit Git-Status ]===================
+# ===================[ Enhanced Bash Prompt with Git Status ]===================
 
-# Farben für PS1 (Bash-escaped)
+# Colors for PS1 (Bash-escaped)
 PS1_RESET="\[\e[0m\]"
 PS1_RED="\[\e[0;31m\]"
 PS1_GREEN="\[\e[0;32m\]"
@@ -592,7 +592,7 @@ PS1_BLUE="\[\e[0;34m\]"
 PS1_LIGHTBLUE="\[\e[1;34m\]"
 PS1_CYAN="\[\e[0;36m\]"
 
-# Git-Status ohne \[ \], aber mit ANSI
+# Git status without \[ \], but with ANSI
 parse_git_branch() {
   git rev-parse --is-inside-work-tree &>/dev/null || return
 
@@ -627,16 +627,16 @@ parse_git_branch() {
   printf "%b" "$result"
 }
 
-# Prompt setzen mit parse_git_branch korrekt eingebunden
+# Set prompt with parse_git_branch correctly integrated
 set_bash_prompt() {
   local user_color exit_str=""
   [[ $EUID -eq 0 ]] && user_color="${PS1_RED}" || user_color="${PS1_GREEN}"
 
-  # Zeit und Datum
-  local now="\$(date +'%F %T')"  # z. B. "2025-03-26 14:30:12"
+  # Time and date
+  local now="\$(date +'%F %T')"  # e.g. "2025-03-26 14:30:12"
   local now_str="${PS1_YELLOW}[${now}]${PS1_RESET}"
 
-  # Exit-Code (nur wenn != 0)
+  # Exit code (only if != 0)
   local last_exit=$?
   if [[ $last_exit -ne 0 ]]; then
     exit_str="${PS1_RED}✖${last_exit}${PS1_RESET} "

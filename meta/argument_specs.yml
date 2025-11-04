@@ -44,6 +44,11 @@ argument_specs:
         required: true
         description: "Password for Proxmox API"
 
+      proxmox_automatic_api_validate_certs:
+        type: bool
+        default: false
+        description: "Validate SSL certificates for Proxmox API connections"
+
       # VM Configuration
       proxmox_automatic_vmid:
         type: int

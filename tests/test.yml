@@ -3,7 +3,7 @@
   hosts: all
   gather_facts: false
   vars:
-    # Überschreibe API-Calls für Tests
+    # Override API calls for tests
     proxmox_automatic_install_dependencies: false
     proxmox_automatic_api_host: "test.example.com"
     proxmox_automatic_api_password: "test-password"
@@ -15,7 +15,7 @@
         tasks_from: main
       tags:
         - proxmox_automatic_create_kickstart
-      when: false  # Verhindert tatsächliche VM-Erstellung in Tests
+      when: false  # Prevents actual VM creation in tests
 
     - name: Test variable merging
       debug:
