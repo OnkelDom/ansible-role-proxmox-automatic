@@ -193,6 +193,18 @@
     - proxmox_automatic_create_kickstart
     - proxmox_automatic
 
+- name: "VM Pools sicherstellen"
+  ansible.builtin.import_tasks: create_pools.yml
+  tags:
+    - proxmox_automatic_pools
+    - proxmox_automatic
+
+- name: "HA-Gruppen sicherstellen"
+  ansible.builtin.import_tasks: create_ha_groups.yml
+  tags:
+    - proxmox_automatic_ha
+    - proxmox_automatic
+
 - name: "VMs auf Proxmox erstellen"
   ansible.builtin.import_tasks: create_vm.yml
   tags:

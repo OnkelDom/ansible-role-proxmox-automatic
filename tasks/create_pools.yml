@@ -1,0 +1,45 @@
+---
+# Ensure VM pools exist before creating VMs
+- name: "Collect all unique VM pools from play hosts"
+  ansible.builtin.set_fact:
+    all_vm_pools: >-
+      {{
+        ansible_play_hosts
+        | map('extract', hostvars, 'proxmox_automatic_vm_pool')
+        | select('defined')
+        | reject('equalto', 'omit')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+  run_once: true
+  delegate_to: localhost
+  tags:
+    - proxmox_automatic_pools
+
+- name: "Debug: Show collected VM pools"
+  ansible.builtin.debug:
+    msg: "Found VM pools: {{ all_vm_pools }}"
+  run_once: true
+  delegate_to: localhost
+  when: all_vm_pools | length > 0
+  tags:
+    - proxmox_automatic_pools
+
+- name: "Ensure VM pool {{ item }} exists"
+  community.proxmox.proxmox_pool:
+    api_host: "{{ proxmox_automatic_api_host }}"
+    api_user: "{{ proxmox_automatic_api_user }}"
+    api_password: "{{ proxmox_automatic_api_password }}"
+    api_token_id: "{{ proxmox_automatic_api_token_id | default(omit) }}"
+    api_token_secret: "{{ proxmox_automatic_api_token_secret | default(omit) }}"
+    validate_certs: "{{ proxmox_automatic_api_validate_certs | default(true) }}"
+    poolid: "{{ item }}"
+    comment: "Auto-managed pool by Ansible"
+    state: present
+  loop: "{{ all_vm_pools }}"
+  run_once: true
+  delegate_to: localhost
+  when: all_vm_pools | length > 0
+  tags:
+    - proxmox_automatic_pools

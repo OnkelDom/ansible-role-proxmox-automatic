@@ -412,7 +412,7 @@ argument_specs:
       proxmox_automatic_vm_pool:
         type: str
         default: "omit"
-        description: "Optional pool where the VM will be registered. Only used if specified."
+        description: "Optional pool where the VM will be registered. Pool is automatically created if it doesn't exist."
 
       # Performance Tuning
       proxmox_automatic_create_vm_throttle:
@@ -465,3 +465,65 @@ argument_specs:
         elements: str
         default: []
         description: "List of email recipients for DNF automatic update notifications"
+
+      # High Availability Configuration
+      proxmox_automatic_ha_enabled:
+        type: bool
+        default: true
+        description: "Enable High Availability for this VM"
+
+      proxmox_automatic_ha_group_manage:
+        type: bool
+        default: true
+        description: "Automatically create/manage the HA group if it doesn't exist"
+
+      proxmox_automatic_ha_group_auto:
+        type: bool
+        default: true
+        description: "Automatically generate HA group per hypervisor (format: ha-group-<hypervisor>)"
+
+      proxmox_automatic_ha_group:
+        type: str
+        default: ""
+        description: "HA group name to assign the VM to (auto-generated if empty and ha_group_auto is true)"
+
+      proxmox_automatic_ha_group_nodes:
+        type: str
+        default: ""
+        description: "Comma-separated list of nodes with priorities (e.g., 'node1:0,node2:1,node3:2')"
+
+      proxmox_automatic_ha_group_nofailback:
+        type: bool
+        default: false
+        description: "If true, HA manager won't migrate back to preferred nodes"
+
+      proxmox_automatic_ha_group_restricted:
+        type: bool
+        default: false
+        description: "If true, only resources in this group can run on these nodes"
+
+      proxmox_automatic_ha_group_comment:
+        type: str
+        default: ""
+        description: "Optional comment for the HA group"
+
+      proxmox_automatic_ha_state:
+        type: str
+        default: "started"
+        choices: ["started", "stopped", "disabled", "ignored"]
+        description: "Desired state of the HA resource"
+
+      proxmox_automatic_ha_max_restart:
+        type: int
+        default: 1
+        description: "Maximum number of restart attempts after a service start failure"
+
+      proxmox_automatic_ha_max_relocate:
+        type: int
+        default: 1
+        description: "Maximum number of service relocation attempts when a service fails to start"
+
+      proxmox_automatic_ha_comment:
+        type: str
+        default: ""
+        description: "Optional comment for the HA resource"

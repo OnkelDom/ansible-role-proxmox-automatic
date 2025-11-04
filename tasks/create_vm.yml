@@ -101,6 +101,34 @@
     seconds: "{{ proxmox_automatic_create_vm_pause | default(10) }}"
   when: proxmox_automatic_create_vm_pause is defined or proxmox_automatic_create_vm_throttle is defined
 
+- name: "Generate HA group name from hypervisor"
+  ansible.builtin.set_fact:
+    proxmox_automatic_ha_group: "ha-group-{{ proxmox_automatic_hypervisor | regex_replace('\\..*$', '') }}"
+  when:
+    - proxmox_automatic_ha_enabled | bool
+    - proxmox_automatic_ha_group_auto | bool
+    - proxmox_automatic_ha_group | length == 0
+
+- name: "Add VM {{ proxmox_automatic_vmid }} to HA group {{ proxmox_automatic_ha_group }}"
+  community.proxmox.proxmox_cluster_ha_resources:
+    api_host: "{{ proxmox_automatic_api_host }}"
+    api_user: "{{ proxmox_automatic_api_user }}"
+    api_password: "{{ proxmox_automatic_api_password }}"
+    api_token_id: "{{ proxmox_automatic_api_token_id | default(omit) }}"
+    api_token_secret: "{{ proxmox_automatic_api_token_secret | default(omit) }}"
+    validate_certs: "{{ proxmox_automatic_api_validate_certs | default(true) }}"
+    name: "vm:{{ proxmox_automatic_vmid }}"
+    group: "{{ proxmox_automatic_ha_group }}"
+    hastate: "{{ proxmox_automatic_ha_state }}"
+    max_restart: "{{ proxmox_automatic_ha_max_restart }}"
+    max_relocate: "{{ proxmox_automatic_ha_max_relocate }}"
+    comment: "{{ proxmox_automatic_ha_comment | default(omit) }}"
+    state: present
+  delegate_to: localhost
+  when:
+    - proxmox_automatic_ha_enabled | bool
+    - proxmox_automatic_ha_group | length > 0
+
 - name: "Start VM"
   community.proxmox.proxmox_kvm:
     api_host: "{{ proxmox_automatic_api_host }}"

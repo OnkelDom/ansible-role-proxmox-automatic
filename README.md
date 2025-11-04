@@ -90,6 +90,80 @@ proxmox_automatic_networks:
     ipv6_gateway: "2001:db8:1::1"
 ```
 
+### High Availability Configuration Example
+
+#### Option 1: Automatic HA per Hypervisor (Default & Recommended)
+
+```yaml
+# group_vars/all.yml or defaults
+proxmox_automatic_ha_enabled: true          # Default: true
+proxmox_automatic_ha_group_auto: true       # Default: true
+proxmox_automatic_ha_group_manage: true     # Default: true
+
+# Inventory
+[proxmox_vms]
+web01 proxmox_automatic_hypervisor=srv-hyp-01.local
+web02 proxmox_automatic_hypervisor=srv-hyp-01.local
+db01 proxmox_automatic_hypervisor=srv-hyp-02.local
+db02 proxmox_automatic_hypervisor=srv-hyp-03.local
+```
+
+**Result:**
+- HA group `ha-group-srv-hyp-01` created with srv-hyp-01 as primary
+  - VMs: web01, web02
+- HA group `ha-group-srv-hyp-02` created with srv-hyp-02 as primary
+  - VMs: db01
+- HA group `ha-group-srv-hyp-03` created with srv-hyp-03 as primary
+  - VMs: db02
+
+**Benefits:**
+- ✅ VMs prefer their hypervisor (priority 0)
+- ✅ Automatic failover to other cluster nodes
+- ✅ Zero manual configuration needed
+- ✅ One HA group per hypervisor
+
+#### Option 2: Manual HA Group Assignment
+
+```yaml
+# group_vars/production.yml
+proxmox_automatic_ha_enabled: true
+proxmox_automatic_ha_group_auto: false      # Disable auto mode
+proxmox_automatic_ha_group_manage: true
+proxmox_automatic_ha_group: "ha-group-production"
+proxmox_automatic_ha_group_nodes: "pve-node1:0,pve-node2:1,pve-node3:2"
+proxmox_automatic_ha_group_nofailback: false
+proxmox_automatic_ha_group_comment: "Production HA group - shared across all VMs"
+
+# host_vars/db01.yml
+proxmox_automatic_ha_comment: "Primary database server - critical service"
+```
+
+**Use case:** All VMs in a group should share the same HA configuration
+
+#### Option 3: Using Existing HA Groups
+
+```yaml
+# group_vars/production.yml
+proxmox_automatic_ha_enabled: true
+proxmox_automatic_ha_group_auto: false      # Disable auto mode
+proxmox_automatic_ha_group_manage: false    # Use existing groups
+proxmox_automatic_ha_group: "ha-group-production"
+
+# host_vars/db01.yml
+proxmox_automatic_ha_comment: "Primary database server"
+```
+
+**Note:** The HA group must already exist in your Proxmox cluster:
+- Proxmox Web UI: Datacenter → HA → Groups
+- CLI: `ha-manager groupadd ha-group-production --nodes pve-node1:0,pve-node2:1`
+
+#### Option 4: Disable HA
+
+```yaml
+# group_vars/development.yml
+proxmox_automatic_ha_enabled: false
+```
+
 ## 🎯 Understanding Hierarchical Configuration
 
 This role uses an intelligent merge system that combines configurations from different levels:
@@ -1051,6 +1125,129 @@ proxmox_automatic_dnf_recipients:
   - "monitoring@example.com"
 ```
 
+### High Availability Configuration
+
+##### `proxmox_automatic_ha_enabled`
+**Default:** `true`  
+**Description:** Enable High Availability for the VM. When enabled, the VM will be added to a Proxmox HA group.
+
+**Example:**
+```yaml
+proxmox_automatic_ha_enabled: false  # Disable HA
+```
+
+##### `proxmox_automatic_ha_group_manage`
+**Default:** `true`  
+**Description:** Automatically create/manage the HA group if it doesn't exist. When enabled, the role will ensure the HA group is created with the specified configuration before adding VMs to it.
+
+**Example:**
+```yaml
+proxmox_automatic_ha_group_manage: false  # Use existing HA groups only
+```
+
+##### `proxmox_automatic_ha_group_auto`
+**Default:** `true`  
+**Description:** Automatically generate one HA group per hypervisor. Each VM will be assigned to the HA group of its hypervisor with that node as primary (priority 0). Group names follow the pattern `ha-group-<hypervisor>` (e.g., `ha-group-srv-hyp-01`).
+
+**How it works:**
+- Collects all unique hypervisors from the play
+- Creates one HA group per hypervisor
+- Primary node (where VMs run) gets priority 0
+- Other cluster nodes get ascending priorities (1, 2, 3, ...)
+- VMs automatically join their hypervisor's HA group
+
+**Example:**
+```yaml
+proxmox_automatic_ha_group_auto: false  # Use manual HA group assignment
+```
+
+##### `proxmox_automatic_ha_group`
+**Default:** `""`  
+**Description:** Name of the HA group to assign the VM to. If `proxmox_automatic_ha_group_manage` is `false`, the group must already exist in the Proxmox cluster.
+
+**Example:**
+```yaml
+proxmox_automatic_ha_group: "ha-group-production"
+```
+
+##### `proxmox_automatic_ha_group_nodes`
+**Default:** `""`  
+**Description:** Comma-separated list of Proxmox nodes with their priorities for the HA group. Lower priority values indicate preferred nodes (0 = most preferred). Only used when `proxmox_automatic_ha_group_manage` is `true`.
+
+**Format:** `"node1:priority1,node2:priority2,node3:priority3"`
+
+**Example:**
+```yaml
+proxmox_automatic_ha_group_nodes: "pve-node1:0,pve-node2:1,pve-node3:2"
+```
+
+##### `proxmox_automatic_ha_group_nofailback`
+**Default:** `false`  
+**Description:** If true, the HA manager won't automatically migrate resources back to higher-priority nodes after they become available again. Only used when managing the HA group.
+
+**Example:**
+```yaml
+proxmox_automatic_ha_group_nofailback: true
+```
+
+##### `proxmox_automatic_ha_group_restricted`
+**Default:** `false`  
+**Description:** If true, only resources assigned to this HA group can run on the specified nodes. Only used when managing the HA group.
+
+**Example:**
+```yaml
+proxmox_automatic_ha_group_restricted: true
+```
+
+##### `proxmox_automatic_ha_group_comment`
+**Default:** `""`  
+**Description:** Optional comment for the HA group. Only used when managing the HA group.
+
+**Example:**
+```yaml
+proxmox_automatic_ha_group_comment: "Production HA group for critical services"
+```
+
+##### `proxmox_automatic_ha_state`
+**Default:** `"started"`  
+**Description:** Desired state of the HA resource. Available states:
+- `started`: Resource should be running
+- `stopped`: Resource should be stopped
+- `disabled`: Resource is not managed by HA
+- `ignored`: Resource is ignored by HA manager
+
+**Example:**
+```yaml
+proxmox_automatic_ha_state: "started"
+```
+
+##### `proxmox_automatic_ha_max_restart`
+**Default:** `1`  
+**Description:** Maximum number of restart attempts after a service start failure on the same node.
+
+**Example:**
+```yaml
+proxmox_automatic_ha_max_restart: 3
+```
+
+##### `proxmox_automatic_ha_max_relocate`
+**Default:** `1`  
+**Description:** Maximum number of service relocation attempts when a service fails to start. After this many relocations, the service will be placed in an error state.
+
+**Example:**
+```yaml
+proxmox_automatic_ha_max_relocate: 2
+```
+
+##### `proxmox_automatic_ha_comment`
+**Default:** `""`  
+**Description:** Optional comment for the HA resource.
+
+**Example:**
+```yaml
+proxmox_automatic_ha_comment: "Production database server"
+```
+
 ### Repository Configuration
 
 ##### `proxmox_automatic_repos`
@@ -1119,12 +1316,21 @@ proxmox_automatic_sysctl_settings:
 
 ##### `proxmox_automatic_vm_pool`
 **Default:** `"omit"`  
-**Description:** Optional pool where the VM will be registered. Only used if specified.
+**Description:** Optional pool where the VM will be registered. The role automatically creates the pool if it doesn't exist before VM creation. Pools are useful for organizing VMs and applying permissions.
 
 **Example:**
 ```yaml
+# group_vars/production.yml
 proxmox_automatic_vm_pool: "production"
+
+# group_vars/development.yml
+proxmox_automatic_vm_pool: "development"
 ```
+
+**Note:** 
+- Pools are automatically created before VMs if they don't exist
+- Multiple VMs can share the same pool
+- If set to `"omit"` or empty, no pool will be assigned
 
 ### Performance Tuning
 
