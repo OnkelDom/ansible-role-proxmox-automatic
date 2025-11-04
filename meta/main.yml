@@ -45,4 +45,4 @@ galaxy_info:
   - name: MacOSX
     versions:
     - all
-  role_name: proxmox-automatic
+  role_name: proxmox_automatic

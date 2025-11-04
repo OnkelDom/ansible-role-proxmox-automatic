@@ -25,6 +25,13 @@ proxmox_automatic_dns_servers:
   - "1.0.0.1"
   - "1.1.1.1"
 
+# IPv6 Configuration (optional)
+proxmox_automatic_ipv6_enabled: false
+proxmox_automatic_ipv6_dns_servers: []
+# Example:
+#  - "2606:4700:4700::1111"
+#  - "2606:4700:4700::1001"
+
 proxmox_automatic_ssh_port: 22
 proxmox_automatic_smtp_host: "smtp.example.com"
 proxmox_automatic_smtp_port: 587
@@ -47,6 +54,14 @@ proxmox_automatic_sysctl_settings:
   net.ipv4.conf.all.rp_filter: 1
   vm.swappiness: 10
   vm.vfs_cache_pressure: 50
+
+# Optional IPv6 sysctl settings (applied when proxmox_automatic_ipv6_enabled is true)
+proxmox_automatic_ipv6_sysctl_settings:
+  net.ipv6.conf.all.forwarding: 1
+  net.ipv6.conf.all.accept_ra: 0
+  net.ipv6.conf.default.accept_ra: 0
+  net.ipv6.conf.all.accept_redirects: 0
+  net.ipv6.conf.default.accept_redirects: 0
 
 # System Configuration
 proxmox_automatic_keyboard_layout: "de"
@@ -94,7 +109,6 @@ proxmox_automatic_users:
     sudo_commands: "NOPASSWD: ALL"  # NOPASSWD: ALL, or specific commands like "/bin/systemctl, /usr/bin/docker"
     sudo_nopasswd: true
     ssh_key: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC3..."
-    additional_ssh_keys: []
     generate_vimcfg: true
     generate_tmuxcfg: true
     email: "mail@local.host"
@@ -153,8 +167,10 @@ proxmox_automatic_storage_config_defaults:
             size: 2048
             fstype: swap
 
-proxmox_automatic_packages:
-  # Basis
+# Package Management
+# Default packages installed on all VMs (base system)
+proxmox_automatic_packages_default:
+  # Essential system packages
   - bash-completion
   - bzip2
   - curl
@@ -181,7 +197,7 @@ proxmox_automatic_packages:
   - wget
   - xfsprogs
   - xz
-  # Netzwerk / Debug
+  # Network & Debug tools
   - bind-utils
   - cifs-utils
   - expect
@@ -198,7 +214,7 @@ proxmox_automatic_packages:
   - tcpdump
   - telnet
   - whois
-  # Monitoring & Diagnose
+  # Monitoring & Diagnosis
   - dstat
   - htop
   - iotop
@@ -206,19 +222,25 @@ proxmox_automatic_packages:
   - tig
   - tmux
   - tree
-  # Mails & Kommunikation
+  # Mail & Communication
   - s-nail
   - msmtp
-  # Archivierung / Dateihandling
+  # Archive & File handling
   - dos2unix
   - p7zip
-  # Packete entfernen
+  # Packages to remove
   - -cockpit
   - -postfix
   - -sendmail
 
+# Additional packages (can be extended via group_vars/host_vars)
+proxmox_automatic_packages_additional: []
+
 # Initialize empty network list for merging
 proxmox_automatic_networks: []
+
+proxmox_automatic_dnf_recipients:
+  - "support@{{ proxmox_automatic_smtp_from.split('@')[1] }}"
 
 # VM Creation Performance Tuning
 # Limit number of simultaneous VM creations (throttle)

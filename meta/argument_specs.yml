@@ -168,6 +168,27 @@ argument_specs:
         default: ["1.0.0.1", "1.1.1.1"]
         description: "List of DNS servers"
 
+      proxmox_automatic_ipv6_enabled:
+        type: bool
+        default: false
+        description: "Enable IPv6 support. When enabled, VMs will be configured with IPv6 addresses and routing."
+
+      proxmox_automatic_ipv6_dns_servers:
+        type: list
+        elements: str
+        default: []
+        description: "List of IPv6 DNS servers (used when IPv6 is enabled)"
+
+      proxmox_automatic_ipv6_sysctl_settings:
+        type: dict
+        default:
+          net.ipv6.conf.all.forwarding: 1
+          net.ipv6.conf.all.accept_ra: 0
+          net.ipv6.conf.default.accept_ra: 0
+          net.ipv6.conf.all.accept_redirects: 0
+          net.ipv6.conf.default.accept_redirects: 0
+        description: "Sysctl settings applied when IPv6 is enabled"
+
       # Boot Configuration
       proxmox_automatic_boot_order:
         type: int
@@ -208,7 +229,7 @@ argument_specs:
       proxmox_automatic_ntp_servers:
         type: list
         elements: str
-        default: ["time.cloudflare.com"]
+        default: ["0.de.pool.ntp.org", "1.de.pool.ntp.org", "2.de.pool.ntp.org", "3.de.pool.ntp.org"]
         description: "List of NTP servers"
 
       proxmox_automatic_selinux_mode:
@@ -323,11 +344,17 @@ argument_specs:
         description: "Services to disable"
 
       # Package Management
-      proxmox_automatic_packages:
+      proxmox_automatic_packages_default:
         type: list
         elements: str
         default: []
-        description: "List of packages to install in Kickstart"
+        description: "Default packages installed on all VMs (base system)"
+
+      proxmox_automatic_packages_additional:
+        type: list
+        elements: str
+        default: []
+        description: "Additional packages (can be extended via group_vars/host_vars)"
 
       proxmox_automatic_package_retries:
         type: int
@@ -374,7 +401,11 @@ argument_specs:
       # System Tuning
       proxmox_automatic_sysctl_settings:
         type: dict
-        default: {}
+        default:
+          net.ipv4.ip_forward: 1
+          net.ipv4.conf.all.rp_filter: 1
+          vm.swappiness: 10
+          vm.vfs_cache_pressure: 50
         description: "Sysctl settings for better network performance"
 
       # Pool Management
@@ -423,3 +454,14 @@ argument_specs:
         type: int
         default: 5
         description: "Pause after VM start (seconds)"
+
+      proxmox_automatic_dnf_automatic_enabled:
+        type: bool
+        default: true
+        description: "Enable automatic DNF updates using dnf-automatic"
+
+      proxmox_automatic_dnf_recipients:
+        type: list
+        elements: str
+        default: []
+        description: "List of email recipients for DNF automatic update notifications"

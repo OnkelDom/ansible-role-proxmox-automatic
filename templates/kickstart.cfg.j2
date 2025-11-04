@@ -19,16 +19,19 @@ timesource --ntp-server {{ ntp }}
 # NETWORK, SELINUX, FIREWALL
 # Multi-interface network configuration with configurable interface naming
 {% if proxmox_automatic_dhcp_enabled %}
-network --bootproto=dhcp --device=enp6s18 --onboot=on --hostname={{ ansible_host }}
+network --bootproto=dhcp --device=enp6s18 --onboot=on --hostname={{ ansible_host }}{% if proxmox_automatic_ipv6_enabled %} --ipv6=auto{% endif %}
+
 {% else %}
 {%   for network in proxmox_automatic_networks %}
 {%     set device = 'enp6s' + (18 + network.name|replace('net','')|int)|string %}
 {%     if network.name == 'net0' %}
 
-network --bootproto=static --device={{ device }} --onboot=on --activate --ip={{ network.ip }} --netmask={{ network.netmask }} --gateway={{ network.gateway }} --nameserver={{ proxmox_automatic_dns_servers | join(',') }} --hostname={{ ansible_host }}
+network --bootproto=static --device={{ device }} --onboot=on --activate --ip={{ network.ip }} --netmask={{ network.netmask }} --gateway={{ network.gateway }} --nameserver={{ proxmox_automatic_dns_servers | join(',') }}{% if proxmox_automatic_ipv6_enabled and proxmox_automatic_ipv6_dns_servers | length > 0 %},{{ proxmox_automatic_ipv6_dns_servers | join(',') }}{% endif %} --hostname={{ ansible_host }}{% if proxmox_automatic_ipv6_enabled %}{% if network.ipv6 is defined %} --ipv6={{ network.ipv6 }}{% if network.ipv6_gateway is defined %} --ipv6gateway={{ network.ipv6_gateway }}{% endif %}{% else %} --ipv6=auto{% endif %}{% endif %}
+
 {%     else %}
 
-network --bootproto=static --device={{ device }} --onboot=on --activate --ip={{ network.ip }} --netmask={{ network.netmask }}{% if network.gateway is defined %} --gateway={{ network.gateway }}{% endif %}
+network --bootproto=static --device={{ device }} --onboot=on --activate --ip={{ network.ip }} --netmask={{ network.netmask }}{% if network.gateway is defined %} --gateway={{ network.gateway }}{% endif %}{% if proxmox_automatic_ipv6_enabled %}{% if network.ipv6 is defined %} --ipv6={{ network.ipv6 }}{% if network.ipv6_gateway is defined %} --ipv6gateway={{ network.ipv6_gateway }}{% endif %}{% else %} --ipv6=auto{% endif %}{% endif %}
+
 {%     endif %}
 
 {%   endfor %}
@@ -130,9 +133,13 @@ openssh-server
 {% if proxmox_automatic_dnf_automatic_enabled %}
 dnf-automatic
 {% endif %}
-# Add additional packages here
-{% if proxmox_automatic_packages %}
-{{ proxmox_automatic_packages | join('\n') }}
+# Default packages (installed on all VMs)
+{% if proxmox_automatic_packages_default %}
+{{ proxmox_automatic_packages_default | join('\n') }}
+{% endif %}
+# Additional packages (host/group specific)
+{% if proxmox_automatic_packages_additional %}
+{{ proxmox_automatic_packages_additional | join('\n') }}
 {% endif %}
 %end
 
@@ -449,6 +456,13 @@ EOF
 {%   endfor %}
 {% endif%}
 
+# Set IPv6 sysctl entries if IPv6 is enabled
+{% if proxmox_automatic_ipv6_enabled and proxmox_automatic_ipv6_sysctl_settings %}
+{%   for key, value in proxmox_automatic_ipv6_sysctl_settings.items() %}
+/usr/bin/echo "{{ key }} = {{ value }}" >> /etc/sysctl.d/99-proxmox-automatic-ipv6.conf
+{%   endfor %}
+{% endif%}
+
 # Create /etc/profile.d/motd.sh
 /usr/bin/cat > /etc/profile.d/motd.sh << 'EOF'
 #!/bin/sh
@@ -489,6 +503,11 @@ EOF
 {% set space = 16 - host_ip | length %}
 {{ host_ip }}{% for i in range(1, space,1) %} {% endfor %}{{ ansible_host }} {{ hostname_short }}
 {% endif %}
+{% if proxmox_automatic_ipv6_enabled and net0_network and net0_network.ipv6 is defined %}
+{% set host_ipv6 = net0_network.ipv6.split('/')[0] %}
+{% set space = 16 - host_ipv6 | length %}
+{{ host_ipv6 }}{% for i in range(1, space,1) %} {% endfor %}{{ ansible_host }} {{ hostname_short }}
+{% endif %}
 {% endif %}
 
 {% if proxmox_automatic_additional_hosts is defined and proxmox_automatic_additional_hosts | length > 0 %}
@@ -517,6 +536,9 @@ Port {{ proxmox_automatic_ssh_port }}
 {% if net0_network and net0_network.ip is defined %}
 ListenAddress {{ net0_network.ip }}
 {% endif %}
+{% if proxmox_automatic_ipv6_enabled and net0_network and net0_network.ipv6 is defined %}
+ListenAddress {{ net0_network.ipv6.split('/')[0] }}
+{% endif %}
 EOF
 
 # Configure dnf automatic updates if enabled
@@ -533,17 +555,11 @@ reboot = yes
 reboot_command = shutdown -r +5 "Rebooting after applying automatic package updates"
 
 [emitters]
-emit_via = command_email
+emit_via = email
 
 [command_email]
-# msmtp reads Headers (-t)
-command_format = /usr/bin/msmtp -t
-email_from = {{ proxmox_automatic_smtp_user }}
-email_to = {{ proxmox_automatic_smtp_root }}
-subject = [{{ ansible_host }}] Automatic package updates applied
-body = Automatic package updates have been applied on {{ ansible_host }}. The system will reboot in 5 minutes if required.
-# Format for passing email content to msmtp
-stdin_format = To: {email_to}\nFrom: {email_from}\nSubject: {subject}\n\n{body}
+email_from = {{ ansible_host.split('.')[0] }}@{{ proxmox_automatic_smtp_from.split('@')[1] }}
+email_to = {{ proxmox_automatic_dnf_recipients | join(',') }}
 EOF
 /usr/bin/systemctl enable --now dnf-automatic.timer
 {% endif %}

@@ -70,6 +70,26 @@ web01 proxmox_automatic_vmid=101 ansible_host=10.1.1.10
 db01 proxmox_automatic_vmid=102 ansible_host=10.1.1.20
 ```
 
+### IPv6 Configuration Example
+
+```yaml
+# group_vars/all.yml
+proxmox_automatic_ipv6_enabled: true
+proxmox_automatic_ipv6_dns_servers:
+  - "2606:4700:4700::1111"
+  - "2606:4700:4700::1001"
+
+# host_vars/web01.yml
+proxmox_automatic_networks:
+  - name: net0
+    bridge: vmbr0
+    ip: "192.168.1.10"
+    netmask: "255.255.255.0"
+    gateway: "192.168.1.1"
+    ipv6: "2001:db8:1::10/64"
+    ipv6_gateway: "2001:db8:1::1"
+```
+
 ## 🎯 Understanding Hierarchical Configuration
 
 This role uses an intelligent merge system that combines configurations from different levels:
@@ -111,6 +131,38 @@ proxmox_automatic_storage_config_host_vars:
 ```
 
 **Result:** `db01` will have 3 disks: 40GB system, 200GB data, 100GB backup.
+
+### Package Configuration Hierarchy
+
+Packages are split into two categories for maximum flexibility:
+
+- `proxmox_automatic_packages_default` - Base packages installed on **all** VMs
+- `proxmox_automatic_packages_additional` - Additional packages per group/host
+
+**Example:**
+
+```yaml
+# defaults/main.yml - Base packages on all VMs
+proxmox_automatic_packages_default:
+  - bash-completion
+  - vim
+  - git
+  - htop
+  - tcpdump
+  # ... many more essential tools
+
+# group_vars/webservers.yml - Web-specific packages
+proxmox_automatic_packages_additional:
+  - httpd
+  - php
+  - php-mysqlnd
+
+# host_vars/web01.yml - Host-specific package
+proxmox_automatic_packages_additional:
+  - php-redis  # Only web01 needs Redis
+```
+
+**Result:** All VMs get the base tools, webservers get PHP/Apache, web01 additionally gets php-redis.
 
 ### User Configuration Hierarchy
 
@@ -479,17 +531,22 @@ proxmox_automatic_defaultbridge: "vmbr0"
 
 ##### `proxmox_automatic_networks`
 **Default:** `[]`  
-**Description:** List of additional network cards (bridge, vlanid, mtu, mac, model)
+**Description:** List of network interfaces with static IP configuration (bridge, vlanid, ip, netmask, gateway, mtu, mac, model, ipv6, ipv6_gateway)
 
 **Example:**
 ```yaml
 proxmox_automatic_networks:
   - name: net0
     bridge: vmbr0
+    ip: "192.168.1.10"
+    netmask: "255.255.255.0"
+    gateway: "192.168.1.1"
     vlanid: 100
     mtu: 1500
   - name: net1
     bridge: vmbr1
+    ip: "10.0.0.10"
+    netmask: "255.255.255.0"
     vlanid: 200
     model: "virtio"
 ```
@@ -500,17 +557,24 @@ proxmox_automatic_networks:
 proxmox_automatic_networks_defaults:
   - name: net0
     bridge: vmbr0
+    ip: "192.168.1.10"
+    netmask: "255.255.255.0"
+    gateway: "192.168.1.1"
 
 # group_vars/webservers.yml
 proxmox_automatic_networks_group_vars:
   - name: net1
     bridge: vmbr1
+    ip: "10.10.10.10"
+    netmask: "255.255.255.0"
     vlanid: 100  # Web VLAN
 
 # host_vars/web01.yml
 proxmox_automatic_networks_host_vars:
   - name: net2
     bridge: vmbr2
+    ip: "10.0.0.10"
+    netmask: "255.255.255.0"
     vlanid: 999  # Management VLAN
 ```
 
@@ -534,6 +598,54 @@ proxmox_automatic_dns_servers:
   - "8.8.4.4"
   - "1.1.1.1"
 ```
+
+##### `proxmox_automatic_ipv6_enabled`
+**Default:** `false`  
+**Description:** Enable IPv6 support. When enabled, VMs will be configured with IPv6 addresses and routing.
+
+**Example:**
+```yaml
+proxmox_automatic_ipv6_enabled: true
+```
+
+##### `proxmox_automatic_ipv6_dns_servers`
+**Default:** `[]`  
+**Description:** List of IPv6 DNS servers (used when IPv6 is enabled)
+
+**Example:**
+```yaml
+proxmox_automatic_ipv6_dns_servers:
+  - "2606:4700:4700::1111"
+  - "2606:4700:4700::1001"
+  - "2001:4860:4860::8888"
+```
+
+**Note:** When configuring IPv6 for network interfaces, add `ipv6` and optionally `ipv6_gateway` to your network configuration:
+
+```yaml
+proxmox_automatic_networks:
+  - name: net0
+    bridge: vmbr0
+    ip: "192.168.1.10"
+    netmask: "255.255.255.0"
+    gateway: "192.168.1.1"
+    ipv6: "2001:db8::10/64"
+    ipv6_gateway: "2001:db8::1"
+```
+
+If `ipv6` is not specified but `proxmox_automatic_ipv6_enabled` is `true`, IPv6 will be configured using autoconfiguration (SLAAC).
+
+##### `proxmox_automatic_ipv6_sysctl_settings`
+**Default:**
+```yaml
+proxmox_automatic_ipv6_sysctl_settings:
+  net.ipv6.conf.all.forwarding: 1
+  net.ipv6.conf.all.accept_ra: 0
+  net.ipv6.conf.default.accept_ra: 0
+  net.ipv6.conf.all.accept_redirects: 0
+  net.ipv6.conf.default.accept_redirects: 0
+```
+**Description:** Sysctl settings applied when IPv6 is enabled
 
 ### Boot Configuration
 
@@ -603,13 +715,14 @@ proxmox_automatic_keyboard_variants: "us,de"
 ```
 
 ##### `proxmox_automatic_ntp_servers`
-**Default:** `["time.cloudflare.com"]`  
+**Default:** `["0.de.pool.ntp.org", "1.de.pool.ntp.org", "2.de.pool.ntp.org", "3.de.pool.ntp.org"]`  
 **Description:** List of NTP servers
 
 **Example:**
 ```yaml
 proxmox_automatic_ntp_servers:
-  - "pool.ntp.org"
+  - "0.pool.ntp.org"
+  - "1.pool.ntp.org"
   - "time.google.com"
 ```
 
@@ -844,18 +957,42 @@ proxmox_automatic_disabled_services:
 
 ### Package Management
 
-##### `proxmox_automatic_packages`
+##### `proxmox_automatic_packages_default`
+**Default:** `[]` (populated with base system packages in defaults/main.yml)  
+**Description:** Default packages installed on all VMs (base system). This list contains essential tools, network utilities, monitoring tools, etc. that are installed on every VM.
+
+**Default includes:**
+- Essential system packages (bash-completion, curl, git, vim, etc.)
+- Network & Debug tools (bind-utils, tcpdump, nmap, etc.)
+- Monitoring & Diagnosis tools (htop, iotop, tmux, etc.)
+- Mail tools (msmtp, s-nail)
+
+**Example (override defaults):**
+```yaml
+proxmox_automatic_packages_default:
+  - "bash-completion"
+  - "vim"
+  - "git"
+  - "curl"
+  - "htop"
+```
+
+##### `proxmox_automatic_packages_additional`
 **Default:** `[]`  
-**Description:** List of packages to install in Kickstart
+**Description:** Additional packages specific to groups or individual hosts. Use this to add role-specific packages without modifying the base package list.
 
 **Example:**
 ```yaml
-proxmox_automatic_packages:
-  - "vim"
-  - "htop"
-  - "git"
-  - "curl"
-  - "wget"
+# group_vars/webservers.yml
+proxmox_automatic_packages_additional:
+  - "httpd"
+  - "php"
+  - "php-mysqlnd"
+
+# host_vars/db01.yml
+proxmox_automatic_packages_additional:
+  - "mariadb-server"
+  - "mariadb-client"
 ```
 
 ##### `proxmox_automatic_package_retries`
@@ -892,6 +1029,26 @@ proxmox_automatic_minimal_environment: "@^server-product-environment"
 **Example:**
 ```yaml
 proxmox_automatic_install_languages: "en de fr"
+```
+
+##### `proxmox_automatic_dnf_automatic_enabled`
+**Default:** `true`  
+**Description:** Enable automatic DNF updates using dnf-automatic
+
+**Example:**
+```yaml
+proxmox_automatic_dnf_automatic_enabled: false
+```
+
+##### `proxmox_automatic_dnf_recipients`
+**Default:** `["support@{{ proxmox_automatic_smtp_from.split('@')[1] }}"]`  
+**Description:** List of email recipients for DNF automatic update notifications
+
+**Example:**
+```yaml
+proxmox_automatic_dnf_recipients:
+  - "sysadmin@example.com"
+  - "monitoring@example.com"
 ```
 
 ### Repository Configuration
@@ -939,16 +1096,23 @@ proxmox_automatic_url_mirrorlist: "http://internal-mirror.com/rocky/mirrorlist"
 ### System Tuning
 
 ##### `proxmox_automatic_sysctl_settings`
-**Default:** `{}`  
+**Default:**
+```yaml
+proxmox_automatic_sysctl_settings:
+  net.ipv4.ip_forward: 1
+  net.ipv4.conf.all.rp_filter: 1
+  vm.swappiness: 10
+  vm.vfs_cache_pressure: 50
+```
 **Description:** Sysctl settings for better network performance
 
 **Example:**
 ```yaml
 proxmox_automatic_sysctl_settings:
-  "net.ipv4.tcp_congestion_control": "bbr"
-  "net.core.rmem_max": "16777216"
-  "net.core.wmem_max": "16777216"
-  "vm.swappiness": "10"
+  net.ipv4.tcp_congestion_control: "bbr"
+  net.core.rmem_max: 16777216
+  net.core.wmem_max: 16777216
+  vm.swappiness: 10
 ```
 
 ### Pool Management
@@ -1099,10 +1263,12 @@ proxmox_automatic_storage_config_host_vars:
 proxmox_automatic_networks_host_vars:
   - name: net1
     bridge: vmbr1
+    ip: "10.10.20.10"
+    netmask: "255.255.255.0"
     vlanid: 200  # Database VLAN
 
 # Database-specific packages
-proxmox_automatic_packages:
+proxmox_automatic_packages_additional:
   - "mariadb-server"
   - "mariadb-client"
   - "python3-pymysql"
@@ -1133,10 +1299,12 @@ proxmox_automatic_storage_config_group_vars:
 proxmox_automatic_networks_group_vars:
   - name: net1
     bridge: vmbr1
+    ip: "10.10.10.10"
+    netmask: "255.255.255.0"
     vlanid: 100
 
 # Web-specific packages
-proxmox_automatic_packages:
+proxmox_automatic_packages_additional:
   - "httpd"
   - "php"
   - "php-mysqlnd"
@@ -1156,15 +1324,14 @@ proxmox_automatic_users_group_vars:
 proxmox_automatic_selinux_mode: "permissive"
 proxmox_automatic_firewall_enabled: false
 
-# Development packages
-proxmox_automatic_packages:
-  - "git"
-  - "vim"
-  - "htop"
+# Development packages (additional to base packages)
+proxmox_automatic_packages_additional:
   - "nodejs"
   - "npm"
   - "python3-pip"
   - "docker-ce"
+  - "docker-ce-cli"
+  - "containerd.io"
 
 # Developer users with sudo access
 proxmox_automatic_users_group_vars:
