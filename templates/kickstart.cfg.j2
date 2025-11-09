@@ -212,6 +212,22 @@ echo "$(date): Starting post-installation configuration" >> /root/anaconda-ks-po
 {%   endfor %}
 {% endif %}
 
+{% if proxmox_automatic_enable_epel %}
+# ===== EPEL Repository aktivieren =====
+echo "$(date): Installing EPEL repository" >> /root/anaconda-ks-post.log
+/usr/bin/dnf install -y epel-release
+/usr/bin/dnf makecache
+
+# ===== EPEL-Pakete nachinstallieren =====
+echo "$(date): Installing EPEL packages" >> /root/anaconda-ks-post.log
+{%   if proxmox_automatic_epel_packages | length > 0 %}
+/usr/bin/dnf install -y \
+{%     for package in proxmox_automatic_epel_packages %}
+    {{ package }}{{ '' if loop.last else ' \\' }}
+{%     endfor %}
+{%   endif %}
+{% endif %}
+
 # Create Vim configuration for root user
 /usr/bin/cat > /root/.vimrc << 'EOF'
 set laststatus=2 " Always display the statusline in all windows

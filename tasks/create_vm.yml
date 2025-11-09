@@ -67,7 +67,7 @@
     ide:
       ide2: >-
         media=cdrom,{{ proxmox_automatic_storage | default(proxmox_automatic_pve_iso_storage) }}:iso/{{
-        proxmox_automatic_iso_name | default('rocky9.6-ks') }}.iso
+        proxmox_automatic_iso_name }}.iso
       ide3: >-
         media=cdrom,{{ proxmox_automatic_storage | default(proxmox_automatic_pve_iso_storage) }}:iso/ks-{{
         ansible_host }}.iso
