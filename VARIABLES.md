@@ -1157,3 +1157,21 @@ proxmox_automatic_start_vm_retry_delay: 5
 proxmox_automatic_start_vm_pause: 10
 ```
 
+##### `proxmox_automatic_enable_epel`
+**Default:** `true`  
+**Description:** Enable EPEL repository
+
+##### `proxmox_automatic_epel_packages`
+**Default:**
+```yaml
+proxmox_automatic_epel_packages:
+  - epel-release
+  - dstat
+  - htop
+  - iotop
+  - tig
+  - msmtp
+  - msmtp-mta
+  - p7zip
+```
+**Description:** List of EPEL packages to install

@@ -158,31 +158,18 @@ proxmox_automatic_users:
     email: "mail@local.host"
     additional_ssh_keys: []
 
-# Rocky Linux 9 Repository Configuration
-# proxmox_automatic_url_baseos: ""
-# proxmox_automatic_url_mirrorlist: "http://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=BaseOS-9"
-# proxmox_automatic_repos:
-#   - name: baseos
-#     mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=BaseOS-9
-#   - name: appstream
-#     mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=AppStream-9
-#   - name: extras
-#     mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=extras-9
-#   - name: crb
-#     mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=CRB-9
-
-# Almalinux 10 Repository Configuration
-proxmox_automatic_url_baseos: "https://mirror.plusserver.com/almalinux/10/BaseOS/x86_64/os/"
-proxmox_automatic_url_mirrorlist: ""
+proxmox_automatic_url_baseos: ""
+proxmox_automatic_url_mirrorlist: "http://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=BaseOS-9"
 proxmox_automatic_repos:
   - name: baseos
-    baseurl: https://mirror.plusserver.com/almalinux/10/BaseOS/x86_64/os/
+    mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=BaseOS-9
   - name: appstream
-    baseurl: https://mirror.plusserver.com/almalinux/10/AppStream/x86_64/os/
+    mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=AppStream-9
   - name: extras
-    baseurl: https://mirror.plusserver.com/almalinux/10/extras/x86_64/os/
+    mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=extras-9
   - name: crb
-    baseurl: https://mirror.plusserver.com/almalinux/10/CRB/x86_64/os/
+    mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=CRB-9
+
 
 # Storage configuration
 proxmox_automatic_storage_config_defaults:
@@ -262,13 +249,12 @@ proxmox_automatic_packages_default:
   - nfs-utils
   - nmap
   - nmap-ncat
-  - swaks
   - tcpdump
   - telnet
   - whois
   # Monitoring & Diagnosis
   - strace
-  - tig
+
   - tmux
   - tree
   # Mail & Communication
@@ -294,6 +280,8 @@ proxmox_automatic_epel_packages:
   - msmtp-mta       # msmtp als alternatives MTA
   - p7zip           # 7-Zip Archiver
   - dstat           # (veraltet, aber noch in EPEL)
+  - tig             # Git TUI
+  - swaks           # SMTP test tool
 
 # Additional packages (can be extended via group_vars/host_vars)
 proxmox_automatic_packages_additional: []

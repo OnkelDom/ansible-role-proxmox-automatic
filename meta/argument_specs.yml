@@ -532,3 +532,22 @@ argument_specs:
         type: str
         default: ""
         description: "Optional comment for the HA resource"
+
+      proxmox_automatic_enable_epel:
+        type: bool
+        default: true
+        description: "Enable EPEL repository on the VM"
+
+      proxmox_automatic_epel_packages:
+        type: list
+        elements: str
+        default:
+          - epel-release
+          - dstat
+          - htop
+          - iotop
+          - tig
+          - msmtp
+          - msmtp-mta
+          - p7zip
+        description: "List of EPEL packages to install"
