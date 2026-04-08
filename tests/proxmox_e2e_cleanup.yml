@@ -1,0 +1,116 @@
+---
+- name: Cleanup Proxmox E2E VMs and HA state
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - proxmox_e2e_matrix.yml
+  vars:
+    proxmox_e2e_api_host: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_HOST') | default('', true) }}"
+    proxmox_e2e_api_user: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_USER') | default('', true) }}"
+    proxmox_e2e_api_password: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_PASSWORD') | default('', true) }}"
+    proxmox_e2e_api_token_id: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_TOKEN_ID') | default('', true) }}"
+    proxmox_e2e_api_token_secret: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_TOKEN_SECRET') | default('', true) }}"
+    proxmox_e2e_api_validate_certs: false
+    proxmox_e2e_hypervisor: "{{ lookup('env', 'PROXMOX_AUTOMATIC_HYPERVISOR') | default('', true) }}"
+    proxmox_e2e_iso_storage: "{{ lookup('env', 'PROXMOX_AUTOMATIC_PVE_ISO_STORAGE') | default('local', true) }}"
+  tasks:
+    - name: Validate required Proxmox E2E environment variables
+      ansible.builtin.assert:
+        that:
+          - proxmox_e2e_api_host | length > 0
+          - proxmox_e2e_hypervisor | length > 0
+          - (proxmox_e2e_api_token_id | length > 0 and proxmox_e2e_api_token_secret | length > 0) or (proxmox_e2e_api_user | length > 0 and proxmox_e2e_api_password | length > 0)
+        fail_msg: >-
+          Export PROXMOX_AUTOMATIC_API_HOST, PROXMOX_AUTOMATIC_HYPERVISOR and either
+          PROXMOX_AUTOMATIC_API_USER plus PROXMOX_AUTOMATIC_API_PASSWORD or
+          PROXMOX_AUTOMATIC_API_TOKEN_ID plus PROXMOX_AUTOMATIC_API_TOKEN_SECRET before
+          running the Proxmox E2E cleanup.
+
+    - name: Remove HA resources for E2E VMs
+      community.proxmox.proxmox_cluster_ha_resources:
+        api_host: "{{ proxmox_e2e_api_host }}"
+        api_user: "{{ proxmox_e2e_api_user | default(omit) }}"
+        api_password: "{{ proxmox_e2e_api_password | default(omit) }}"
+        api_token_id: "{{ proxmox_e2e_api_token_id | default(omit) }}"
+        api_token_secret: "{{ proxmox_e2e_api_token_secret | default(omit) }}"
+        validate_certs: "{{ proxmox_e2e_api_validate_certs }}"
+        name: "vm:{{ item.vmid }}"
+        state: absent
+      loop: "{{ proxmox_e2e_hosts }}"
+      failed_when: false
+
+    - name: Remove shared HA rule for E2E test set
+      community.proxmox.proxmox_cluster_ha_rules:
+        api_host: "{{ proxmox_e2e_api_host }}"
+        api_user: "{{ proxmox_e2e_api_user | default(omit) }}"
+        api_password: "{{ proxmox_e2e_api_password | default(omit) }}"
+        api_token_id: "{{ proxmox_e2e_api_token_id | default(omit) }}"
+        api_token_secret: "{{ proxmox_e2e_api_token_secret | default(omit) }}"
+        validate_certs: "{{ proxmox_e2e_api_validate_certs }}"
+        name: "ha-group-{{ proxmox_e2e_hypervisor | regex_replace('\\..*$', '') }}"
+        state: absent
+      failed_when: false
+
+    - name: Destroy E2E VMs
+      community.proxmox.proxmox_kvm:
+        api_host: "{{ proxmox_e2e_api_host }}"
+        api_user: "{{ proxmox_e2e_api_user | default(omit) }}"
+        api_password: "{{ proxmox_e2e_api_password | default(omit) }}"
+        api_token_id: "{{ proxmox_e2e_api_token_id | default(omit) }}"
+        api_token_secret: "{{ proxmox_e2e_api_token_secret | default(omit) }}"
+        validate_certs: "{{ proxmox_e2e_api_validate_certs }}"
+        node: "{{ proxmox_e2e_hypervisor }}"
+        vmid: "{{ item.vmid }}"
+        state: absent
+        purge: true
+      loop: "{{ proxmox_e2e_hosts }}"
+      failed_when: false
+
+    - name: Remove generated E2E ISOs from Proxmox storage
+      ansible.builtin.uri:
+        url: >-
+          https://{{ proxmox_e2e_api_host }}:8006/api2/json/nodes/{{ proxmox_e2e_hypervisor }}/storage/{{ proxmox_e2e_iso_storage }}/content/{{
+            (proxmox_e2e_iso_storage ~ ':iso/' ~
+            (
+              ('ks-' ~ item.fqdn)
+              if item.backend == 'rocky_kickstart'
+              else
+              ('preseed-' ~ item.fqdn)
+            ) ~ '.iso') | urlencode
+          }}
+        method: DELETE
+        headers: >-
+          {{
+            {'Authorization': 'PVEAPIToken=' ~ proxmox_e2e_api_token_id ~ '=' ~ proxmox_e2e_api_token_secret}
+            if proxmox_e2e_api_token_id | length > 0
+            else {}
+          }}
+        url_username: "{{ proxmox_e2e_api_user if proxmox_e2e_api_token_id | length == 0 else omit }}"
+        url_password: "{{ proxmox_e2e_api_password if proxmox_e2e_api_token_id | length == 0 else omit }}"
+        force_basic_auth: "{{ true if proxmox_e2e_api_token_id | length == 0 else omit }}"
+        validate_certs: "{{ proxmox_e2e_api_validate_certs }}"
+        status_code:
+          - 200
+          - 404
+      loop: "{{ proxmox_e2e_hosts }}"
+      failed_when: false
+
+    - name: Build local E2E cleanup path list
+      ansible.builtin.set_fact:
+        proxmox_e2e_local_cleanup_paths: "{{ (proxmox_e2e_local_cleanup_paths | default([])) + cleanup_paths }}"
+      loop: "{{ proxmox_e2e_hosts }}"
+      vars:
+        cleanup_paths: >-
+          {{
+            [
+              playbook_dir ~ '/kickstart-isos/' ~ (('ks-' ~ item.fqdn) if item.backend == 'rocky_kickstart' else ('preseed-' ~ item.fqdn)) ~ '.iso',
+              playbook_dir ~ '/kickstart-files/' ~ (('ks-' ~ item.fqdn) if item.backend == 'rocky_kickstart' else ('preseed-' ~ item.fqdn)) ~ '.cfg'
+            ]
+          }}
+
+    - name: Remove generated local E2E ISO and config artifacts
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ proxmox_e2e_local_cleanup_paths | default([]) }}"

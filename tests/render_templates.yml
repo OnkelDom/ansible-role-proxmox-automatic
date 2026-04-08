@@ -1,0 +1,960 @@
+---
+- name: Render Kickstart and Preseed templates
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../defaults/main.yml
+  vars:
+    ansible_host: "swarm01.lenmail.de"
+    proxmox_automatic_timezone: "Europe/Berlin"
+    proxmox_automatic_language: "en_US.UTF-8"
+    proxmox_automatic_keyboard_layout: "de"
+    proxmox_automatic_keyboard_variants: "de (nodeadkeys),us"
+    proxmox_automatic_ntp_servers:
+      - "time.cloudflare.com"
+    proxmox_automatic_dns_servers:
+      - "192.0.2.1"
+    proxmox_automatic_dhcp_enabled: false
+    proxmox_automatic_defaultbridge: "vmbr0"
+    proxmox_automatic_install_source: "online"
+    proxmox_automatic_networks:
+      - name: net0
+        bridge: vmbr0
+        vlanid: 30
+        ip: "192.0.2.11"
+        netmask: "255.255.255.0"
+        gateway: "192.0.2.1"
+    proxmox_automatic_storage_config:
+      - name: virtio0
+        size: "32"
+        disk: vda
+        bootloader: true
+        partitions:
+          - name: efi
+            mount: /boot/efi
+            size: 1024
+            fstype: efi
+            primary: true
+          - name: boot
+            mount: /boot
+            size: 1024
+            fstype: ext4
+            primary: true
+          - name: pv.root
+            size: 1024
+            grow: true
+            primary: true
+            type: pv
+        vg:
+          - name: system
+            lv:
+              - name: root
+                mount: /
+                size: 12288
+                fstype: xfs
+              - name: docker
+                mount: /var/lib/docker
+                size: 12288
+                fstype: xfs
+              - name: log
+                mount: /var/log
+                size: 6144
+                fstype: xfs
+              - name: swap
+                mount: swap
+                size: 2048
+                fstype: swap
+    proxmox_automatic_users_merged:
+      - name: "litsadmin"
+        fullname: "LITS Admin"
+        gecos: "LITS Admin"
+        shell: "/bin/bash"
+        uid: 1000
+        gid: 1000
+        groups:
+          - sudo
+        password: "$6$example"
+        password_encrypted: true
+        sudo_commands: "ALL"
+        sudo_nopasswd: true
+        ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey ops@example.com"
+        additional_ssh_keys:
+          - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCTestSecondary ops@example.com"
+        generate_vimcfg: true
+        generate_tmuxcfg: true
+    proxmox_automatic_additional_hosts:
+      - ip: "192.0.2.12"
+        hostname: "swarm02.lenmail.de"
+      - ip: "192.0.2.13"
+        hostname: "swarm03.lenmail.de"
+    proxmox_automatic_enable_epel: false
+    proxmox_automatic_packages_additional:
+      - jq
+    proxmox_automatic_debian_late_command_extra:
+      - "in-target systemctl enable qemu-guest-agent"
+  tasks:
+    - name: Create temporary render directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: proxmox-automatic-tests
+      register: proxmox_automatic_test_render_dir
+
+    - name: Apply primary render scenario facts
+      ansible.builtin.set_fact:
+        proxmox_automatic_timezone: "Europe/Berlin"
+        proxmox_automatic_language: "en_US.UTF-8"
+        proxmox_automatic_keyboard_layout: "de"
+        proxmox_automatic_keyboard_variants: "de (nodeadkeys),us"
+        proxmox_automatic_ntp_servers:
+          - "time.cloudflare.com"
+        proxmox_automatic_dns_servers:
+          - "192.0.2.1"
+        proxmox_automatic_dhcp_enabled: false
+        proxmox_automatic_install_source: "online"
+        proxmox_automatic_defaultbridge: "vmbr0"
+        proxmox_automatic_networks:
+          - name: net0
+            bridge: vmbr0
+            vlanid: 30
+            ip: "192.0.2.11"
+            netmask: "255.255.255.0"
+            gateway: "192.0.2.1"
+        proxmox_automatic_storage_config:
+          - name: virtio0
+            size: "32"
+            disk: vda
+            bootloader: true
+            partitions:
+              - name: efi
+                mount: /boot/efi
+                size: 1024
+                fstype: efi
+                primary: true
+              - name: boot
+                mount: /boot
+                size: 1024
+                fstype: ext4
+                primary: true
+              - name: pv.root
+                size: 1024
+                grow: true
+                primary: true
+                type: pv
+            vg:
+              - name: system
+                lv:
+                  - name: root
+                    mount: /
+                    size: 12288
+                    fstype: xfs
+                  - name: docker
+                    mount: /var/lib/docker
+                    size: 12288
+                    fstype: xfs
+                  - name: log
+                    mount: /var/log
+                    size: 6144
+                    fstype: xfs
+                  - name: swap
+                    mount: swap
+                    size: 2048
+                    fstype: swap
+        proxmox_automatic_users_merged:
+          - name: "litsadmin"
+            fullname: "LITS Admin"
+            gecos: "LITS Admin"
+            shell: "/bin/bash"
+            uid: 1000
+            gid: 1000
+            groups:
+              - sudo
+            password: "$6$example"
+            password_encrypted: true
+            sudo_commands: "ALL"
+            sudo_nopasswd: true
+            ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey ops@example.com"
+            additional_ssh_keys:
+              - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCTestSecondary ops@example.com"
+            generate_vimcfg: true
+            generate_tmuxcfg: true
+        proxmox_automatic_additional_hosts:
+          - ip: "192.0.2.12"
+            hostname: "swarm02.lenmail.de"
+          - ip: "192.0.2.13"
+            hostname: "swarm03.lenmail.de"
+        proxmox_automatic_enable_epel: false
+        proxmox_automatic_packages_additional:
+          - jq
+        proxmox_automatic_debian_late_command_extra:
+          - "in-target systemctl enable qemu-guest-agent"
+
+    - name: Set backend-specific effective packages for Rocky
+      ansible.builtin.set_fact:
+        proxmox_automatic_packages_effective: "{{ proxmox_automatic_packages_default_rocky_kickstart }}"
+
+    - name: Render Rocky kickstart template
+      ansible.builtin.template:
+        src: "{{ [playbook_dir, '..', 'templates', 'kickstart.cfg.j2'] | path_join | realpath }}"
+        dest: "{{ proxmox_automatic_test_render_dir.path }}/kickstart.cfg"
+        mode: "0644"
+      vars:
+        template_render_time: "test"
+
+    - name: Read Rocky kickstart file
+      ansible.builtin.slurp:
+        src: "{{ proxmox_automatic_test_render_dir.path }}/kickstart.cfg"
+      register: proxmox_automatic_kickstart_rendered
+
+    - name: Assert Rocky kickstart content
+      ansible.builtin.assert:
+        that:
+          - "'ignoredisk --only-use=vda' in kickstart_content"
+          - "'bootloader --location=mbr --boot-drive=vda' in kickstart_content"
+          - "'user --name=litsadmin' in kickstart_content"
+          - "'%post --interpreter=/usr/bin/bash' in kickstart_content"
+          - "'/etc/profile.d/git-prompt.sh' not in kickstart_content"
+          - "'/etc/profile.d/motd.sh' not in kickstart_content"
+          - "kickstart_content is not search('\\\\{\\\\{')"
+          - "kickstart_content is not search('\\\\}\\\\}')"
+      vars:
+        kickstart_content: "{{ proxmox_automatic_kickstart_rendered.content | b64decode }}"
+
+    - name: Set backend-specific effective packages for Debian
+      ansible.builtin.set_fact:
+        proxmox_automatic_packages_effective: "{{ proxmox_automatic_debian_packages_default }}"
+
+    - name: Render Debian preseed template
+      ansible.builtin.template:
+        src: "{{ [playbook_dir, '..', 'templates', 'preseed.cfg.j2'] | path_join | realpath }}"
+        dest: "{{ proxmox_automatic_test_render_dir.path }}/preseed.cfg"
+        mode: "0644"
+      vars:
+        template_render_time: "test"
+
+    - name: Read Debian preseed file
+      ansible.builtin.slurp:
+        src: "{{ proxmox_automatic_test_render_dir.path }}/preseed.cfg"
+      register: proxmox_automatic_preseed_rendered
+
+    - name: Assert Debian preseed content
+      ansible.builtin.assert:
+        that:
+          - "'d-i debian-installer/locale string en_US.UTF-8' in preseed_content"
+          - "'d-i mirror/http/hostname string deb.debian.org' in preseed_content"
+          - "'d-i partman-auto/disk string /dev/vda' in preseed_content"
+          - "'d-i preseed/late_command string' in preseed_content"
+          - "'apt-get -y purge intel-microcode iucode-tool amd64-microcode' in preseed_content"
+          - "'in-target update-initramfs -u -k all;' in preseed_content"
+          - "preseed_content is not search('\\\\{\\\\{')"
+          - "preseed_content is not search('\\\\}\\\\}')"
+      vars:
+        preseed_content: "{{ proxmox_automatic_preseed_rendered.content | b64decode }}"
+
+    - name: Remove temporary render directory
+      ansible.builtin.file:
+        path: "{{ proxmox_automatic_test_render_dir.path }}"
+        state: absent
+
+- name: Render Rocky DHCP kickstart variant
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../defaults/main.yml
+  vars:
+    ansible_host: "dhcp01.lenmail.de"
+    proxmox_automatic_dhcp_enabled: true
+    proxmox_automatic_install_source: "online"
+    proxmox_automatic_packages_effective: "{{ proxmox_automatic_packages_default_rocky_kickstart }}"
+    proxmox_automatic_storage_config:
+      - name: virtio0
+        size: "20"
+        disk: vda
+        bootloader: true
+        partitions:
+          - name: efi
+            mount: /boot/efi
+            size: 1024
+            fstype: efi
+            primary: true
+          - name: boot
+            mount: /boot
+            size: 1024
+            fstype: ext4
+            primary: true
+          - name: pv.root
+            size: 1024
+            grow: true
+            primary: true
+            type: pv
+        vg:
+          - name: system
+            lv:
+              - name: root
+                mount: /
+                size: 8192
+                fstype: xfs
+    proxmox_automatic_networks: []
+    proxmox_automatic_users_merged:
+      - name: admin
+        gecos: Admin
+        password: "$6$example"
+        password_encrypted: true
+        groups: ["wheel"]
+        ssh_key: "ssh-ed25519 AAAA dhcp"
+  tasks:
+    - name: Create temporary render directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: proxmox-automatic-rocky-dhcp
+      register: proxmox_automatic_test_render_dir
+
+    - name: Apply Rocky DHCP scenario facts
+      ansible.builtin.set_fact:
+        proxmox_automatic_dhcp_enabled: true
+        proxmox_automatic_install_source: "online"
+        proxmox_automatic_storage_config:
+          - name: virtio0
+            size: "20"
+            disk: vda
+            bootloader: true
+            partitions:
+              - name: efi
+                mount: /boot/efi
+                size: 1024
+                fstype: efi
+                primary: true
+              - name: boot
+                mount: /boot
+                size: 1024
+                fstype: ext4
+                primary: true
+              - name: pv.root
+                size: 1024
+                grow: true
+                primary: true
+                type: pv
+            vg:
+              - name: system
+                lv:
+                  - name: root
+                    mount: /
+                    size: 8192
+                    fstype: xfs
+        proxmox_automatic_networks: []
+        proxmox_automatic_users_merged:
+          - name: admin
+            gecos: Admin
+            password: "$6$example"
+            password_encrypted: true
+            groups: ["wheel"]
+            ssh_key: "ssh-ed25519 AAAA dhcp"
+
+    - name: Render Rocky DHCP kickstart template
+      ansible.builtin.template:
+        src: "{{ [playbook_dir, '..', 'templates', 'kickstart.cfg.j2'] | path_join | realpath }}"
+        dest: "{{ proxmox_automatic_test_render_dir.path }}/kickstart-dhcp.cfg"
+        mode: "0644"
+      vars:
+        template_render_time: "test"
+
+    - name: Read Rocky DHCP kickstart file
+      ansible.builtin.slurp:
+        src: "{{ proxmox_automatic_test_render_dir.path }}/kickstart-dhcp.cfg"
+      register: proxmox_automatic_kickstart_rendered
+
+    - name: Assert Rocky DHCP kickstart content
+      ansible.builtin.assert:
+        that:
+          - "'network --bootproto=dhcp --device=enp6s18' in kickstart_content"
+          - "'rootpw --lock' in kickstart_content"
+          - "kickstart_content is not search('\\\\{\\\\{')"
+      vars:
+        kickstart_content: "{{ proxmox_automatic_kickstart_rendered.content | b64decode }}"
+
+    - name: Remove temporary render directory
+      ansible.builtin.file:
+        path: "{{ proxmox_automatic_test_render_dir.path }}"
+        state: absent
+
+- name: Render Rocky CDROM kickstart variant
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../defaults/main.yml
+  vars:
+    ansible_host: "offline01.lenmail.de"
+    proxmox_automatic_install_source: "cdrom"
+    proxmox_automatic_packages_effective: "{{ proxmox_automatic_packages_default_rocky_kickstart }}"
+    proxmox_automatic_storage_config:
+      - name: virtio0
+        size: "20"
+        disk: vda
+        bootloader: true
+        partitions:
+          - name: efi
+            mount: /boot/efi
+            size: 1024
+            fstype: efi
+            primary: true
+          - name: boot
+            mount: /boot
+            size: 1024
+            fstype: ext4
+            primary: true
+          - name: pv.root
+            size: 1024
+            grow: true
+            primary: true
+            type: pv
+        vg:
+          - name: system
+            lv:
+              - name: root
+                mount: /
+                size: 8192
+                fstype: xfs
+    proxmox_automatic_networks:
+      - name: net0
+        bridge: vmbr1
+        vlanid: 3
+        ip: "192.0.2.21"
+        netmask: "255.255.255.0"
+        gateway: "192.0.2.1"
+    proxmox_automatic_users_merged:
+      - name: admin
+        gecos: Admin
+        password: "$6$example"
+        password_encrypted: true
+        groups: ["wheel"]
+        ssh_key: "ssh-ed25519 AAAA cdrom"
+  tasks:
+    - name: Create temporary render directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: proxmox-automatic-rocky-cdrom
+      register: proxmox_automatic_test_render_dir
+
+    - name: Apply Rocky CDROM scenario facts
+      ansible.builtin.set_fact:
+        proxmox_automatic_install_source: "cdrom"
+        proxmox_automatic_packages_effective: "{{ proxmox_automatic_packages_default_rocky_kickstart }}"
+        proxmox_automatic_packages_additional: []
+        proxmox_automatic_ntp_servers:
+          - "time.cloudflare.com"
+        proxmox_automatic_additional_hosts: []
+        proxmox_automatic_storage_config:
+          - name: virtio0
+            size: "20"
+            disk: vda
+            bootloader: true
+            partitions:
+              - name: efi
+                mount: /boot/efi
+                size: 1024
+                fstype: efi
+                primary: true
+              - name: boot
+                mount: /boot
+                size: 1024
+                fstype: ext4
+                primary: true
+              - name: pv.root
+                size: 1024
+                grow: true
+                primary: true
+                type: pv
+            vg:
+              - name: system
+                lv:
+                  - name: root
+                    mount: /
+                    size: 8192
+                    fstype: xfs
+        proxmox_automatic_networks:
+          - name: net0
+            bridge: vmbr1
+            vlanid: 3
+            ip: "192.0.2.21"
+            netmask: "255.255.255.0"
+            gateway: "192.0.2.1"
+        proxmox_automatic_users_merged:
+          - name: admin
+            gecos: Admin
+            password: "$6$example"
+            password_encrypted: true
+            groups: ["wheel"]
+            ssh_key: "ssh-ed25519 AAAA cdrom"
+
+    - name: Render Rocky CDROM kickstart template
+      ansible.builtin.template:
+        src: "{{ [playbook_dir, '..', 'templates', 'kickstart.cfg.j2'] | path_join | realpath }}"
+        dest: "{{ proxmox_automatic_test_render_dir.path }}/kickstart-cdrom.cfg"
+        mode: "0644"
+      vars:
+        template_render_time: "test"
+
+    - name: Read Rocky CDROM kickstart file
+      ansible.builtin.slurp:
+        src: "{{ proxmox_automatic_test_render_dir.path }}/kickstart-cdrom.cfg"
+      register: proxmox_automatic_kickstart_cdrom_rendered
+
+    - name: Assert Rocky CDROM kickstart content
+      ansible.builtin.assert:
+        that:
+          - "'cdrom' in kickstart_content"
+          - "'url --mirrorlist=' not in kickstart_content"
+          - "'url --url=' not in kickstart_content"
+          - "'repo --name=' not in kickstart_content"
+          - "'kernel-devel' not in kickstart_content"
+      vars:
+        kickstart_content: "{{ proxmox_automatic_kickstart_cdrom_rendered.content | b64decode }}"
+
+    - name: Remove temporary render directory
+      ansible.builtin.file:
+        path: "{{ proxmox_automatic_test_render_dir.path }}"
+        state: absent
+
+- name: Render Debian preseed override variant
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../defaults/main.yml
+  vars:
+    ansible_host: "db01.lenmail.de"
+    proxmox_automatic_language: "en_US.UTF-8"
+    proxmox_automatic_keyboard_layout: "de"
+    proxmox_automatic_timezone: "Europe/Berlin"
+    proxmox_automatic_dhcp_enabled: true
+    proxmox_automatic_networks: []
+    proxmox_automatic_storage_config:
+      - name: virtio0
+        disk: vda
+        bootloader: true
+        partitions: []
+        vg: []
+    proxmox_automatic_users_merged:
+      - name: "dbadmin"
+        fullname: "DB Admin"
+        password: "$6$override"
+        password_encrypted: true
+        groups: ["sudo"]
+        sudo_commands: "ALL"
+        sudo_nopasswd: true
+    proxmox_automatic_packages_effective: "{{ proxmox_automatic_debian_packages_default }}"
+    proxmox_automatic_packages_additional:
+      - postgresql-client
+    proxmox_automatic_debian_partition_recipe_override: >-
+      custom :: 512 512 512 ext4 method{ format } format{ } use_filesystem{ } filesystem{ ext4 } mountpoint{ / } .
+    proxmox_automatic_debian_late_command_extra:
+      - "in-target touch /root/preseed-extra-test"
+  tasks:
+    - name: Create temporary render directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: proxmox-automatic-debian-override
+      register: proxmox_automatic_test_render_dir
+
+    - name: Apply Debian override scenario facts
+      ansible.builtin.set_fact:
+        proxmox_automatic_language: "en_US.UTF-8"
+        proxmox_automatic_keyboard_layout: "de"
+        proxmox_automatic_timezone: "Europe/Berlin"
+        proxmox_automatic_dhcp_enabled: true
+        proxmox_automatic_install_source: "online"
+        proxmox_automatic_networks: []
+        proxmox_automatic_storage_config:
+          - name: virtio0
+            disk: vda
+            bootloader: true
+            partitions: []
+            vg: []
+        proxmox_automatic_users_merged:
+          - name: "dbadmin"
+            fullname: "DB Admin"
+            password: "$6$override"
+            password_encrypted: true
+            groups: ["sudo"]
+            sudo_commands: "ALL"
+            sudo_nopasswd: true
+        proxmox_automatic_packages_effective: "{{ proxmox_automatic_debian_packages_default }}"
+        proxmox_automatic_packages_additional:
+          - postgresql-client
+        proxmox_automatic_debian_partition_recipe_override: >-
+          custom :: 512 512 512 ext4 method{ format } format{ } use_filesystem{ } filesystem{ ext4 } mountpoint{ / } .
+        proxmox_automatic_debian_late_command_extra:
+          - "in-target touch /root/preseed-extra-test"
+
+    - name: Render Debian override preseed template
+      ansible.builtin.template:
+        src: "{{ [playbook_dir, '..', 'templates', 'preseed.cfg.j2'] | path_join | realpath }}"
+        dest: "{{ proxmox_automatic_test_render_dir.path }}/preseed-override.cfg"
+        mode: "0644"
+      vars:
+        template_render_time: "test"
+
+    - name: Read Debian override preseed file
+      ansible.builtin.slurp:
+        src: "{{ proxmox_automatic_test_render_dir.path }}/preseed-override.cfg"
+      register: proxmox_automatic_preseed_rendered
+
+    - name: Assert Debian override preseed content
+      ansible.builtin.assert:
+        that:
+          - "'d-i netcfg/disable_autoconfig boolean false' in preseed_content"
+          - "'d-i partman-auto/expert_recipe string custom ::' in preseed_content"
+          - "'postgresql-client' in preseed_content"
+          - "'touch /root/preseed-extra-test' in preseed_content"
+          - "preseed_content is not search('\\\\{\\\\{')"
+      vars:
+        preseed_content: "{{ proxmox_automatic_preseed_rendered.content | b64decode }}"
+
+    - name: Remove temporary render directory
+      ansible.builtin.file:
+        path: "{{ proxmox_automatic_test_render_dir.path }}"
+        state: absent
+
+- name: Render Debian CDROM multi-NIC variant
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../defaults/main.yml
+  vars:
+    ansible_host: "offline-multi01.lenmail.de"
+    proxmox_automatic_installer_backend: "debian13_preseed"
+    proxmox_automatic_install_source: "cdrom"
+    proxmox_automatic_packages_effective: "{{ proxmox_automatic_debian_packages_default }}"
+    proxmox_automatic_storage_config:
+      - name: virtio0
+        size: "20"
+        disk: vda
+        bootloader: true
+        partitions:
+          - name: efi
+            mount: /boot/efi
+            size: 1024
+            fstype: efi
+            primary: true
+          - name: boot
+            mount: /boot
+            size: 1024
+            fstype: ext4
+            primary: true
+          - name: pv.root
+            size: 1024
+            grow: true
+            primary: true
+            type: pv
+        vg:
+          - name: system
+            lv:
+              - name: root
+                mount: /
+                size: 1024
+                grow: true
+                fstype: xfs
+              - name: log
+                mount: /var/log
+                size: 4096
+                fstype: xfs
+              - name: swap
+                mount: swap
+                size: 2048
+                fstype: swap
+    proxmox_automatic_networks:
+      - name: net0
+        bridge: vmbr1
+        vlanid: 3
+        ip: "192.0.2.31"
+        netmask: "255.255.255.0"
+        gateway: "192.0.2.1"
+      - name: net1
+        bridge: vmbr1
+        vlanid: 7
+        ip: "10.30.70.31"
+        netmask: "255.255.255.0"
+    proxmox_automatic_users_merged:
+      - name: "litsadmin"
+        fullname: "LITS Admin"
+        password: "Example123!"
+        password_encrypted: false
+        groups:
+          - sudo
+        sudo_commands: "ALL"
+        sudo_nopasswd: true
+  tasks:
+    - name: Create temporary render directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: proxmox-automatic-debian-cdrom
+      register: proxmox_automatic_test_render_dir
+
+    - name: Apply Debian CDROM multi-NIC scenario facts
+      ansible.builtin.set_fact:
+        proxmox_automatic_installer_backend: "debian13_preseed"
+        proxmox_automatic_install_source: "cdrom"
+        proxmox_automatic_dhcp_enabled: false
+        proxmox_automatic_packages_effective: "{{ proxmox_automatic_debian_packages_default }}"
+        proxmox_automatic_packages_additional: []
+        proxmox_automatic_additional_hosts: []
+        proxmox_automatic_storage_config:
+          - name: virtio0
+            size: "20"
+            disk: vda
+            bootloader: true
+            partitions:
+              - name: efi
+                mount: /boot/efi
+                size: 1024
+                fstype: efi
+                primary: true
+              - name: boot
+                mount: /boot
+                size: 1024
+                fstype: ext4
+                primary: true
+              - name: pv.root
+                size: 1024
+                grow: true
+                primary: true
+                type: pv
+            vg:
+              - name: system
+                lv:
+                  - name: root
+                    mount: /
+                    size: 1024
+                    grow: true
+                    fstype: xfs
+                  - name: log
+                    mount: /var/log
+                    size: 4096
+                    fstype: xfs
+                  - name: swap
+                    mount: swap
+                    size: 2048
+                    fstype: swap
+        proxmox_automatic_networks:
+          - name: net0
+            bridge: vmbr1
+            vlanid: 3
+            ip: "192.0.2.31"
+            netmask: "255.255.255.0"
+            gateway: "192.0.2.1"
+          - name: net1
+            bridge: vmbr1
+            vlanid: 7
+            ip: "10.30.70.31"
+            netmask: "255.255.255.0"
+        proxmox_automatic_users_merged:
+          - name: "litsadmin"
+            fullname: "LITS Admin"
+            password: "Example123!"
+            password_encrypted: false
+            groups:
+              - sudo
+            sudo_commands: "ALL"
+            sudo_nopasswd: true
+
+    - name: Render Debian CDROM multi-NIC preseed template
+      ansible.builtin.template:
+        src: "{{ [playbook_dir, '..', 'templates', 'preseed.cfg.j2'] | path_join | realpath }}"
+        dest: "{{ proxmox_automatic_test_render_dir.path }}/preseed-cdrom-multinic.cfg"
+        mode: "0644"
+      vars:
+        template_render_time: "test"
+
+    - name: Read Debian CDROM multi-NIC preseed file
+      ansible.builtin.slurp:
+        src: "{{ proxmox_automatic_test_render_dir.path }}/preseed-cdrom-multinic.cfg"
+      register: proxmox_automatic_preseed_cdrom_multinic_rendered
+
+    - name: Assert Debian CDROM multi-NIC preseed content
+      ansible.builtin.assert:
+        that:
+          - "'d-i apt-setup/use_mirror boolean false' in preseed_content"
+          - "'d-i apt-setup/disable-cdrom-entries boolean false' in preseed_content"
+          - "'d-i apt-setup/cdrom/set-first boolean false' in preseed_content"
+          - "'d-i apt-setup/cdrom/set-next boolean false' in preseed_content"
+          - "'d-i apt-setup/cdrom/set-failed boolean false' in preseed_content"
+          - "'d-i mirror/http/hostname string' not in preseed_content"
+          - "'d-i pkgsel/include string ca-certificates lvm2 openssh-server sudo vim xfsprogs' in preseed_content"
+          - "'iface enp6s18 inet static' in preseed_content"
+          - "'iface enp6s19 inet static' in preseed_content"
+          - "'address 192.0.2.31' in preseed_content"
+          - "'address 10.30.70.31' in preseed_content"
+      vars:
+        preseed_content: "{{ proxmox_automatic_preseed_cdrom_multinic_rendered.content | b64decode }}"
+
+    - name: Remove temporary render directory
+      ansible.builtin.file:
+        path: "{{ proxmox_automatic_test_render_dir.path }}"
+        state: absent
+
+- name: Render Debian grow-root variant
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../defaults/main.yml
+  vars:
+    ansible_host: "growroot01.lenmail.de"
+    proxmox_automatic_installer_backend: "debian13_preseed"
+    proxmox_automatic_packages_effective: "{{ proxmox_automatic_debian_packages_default }}"
+    proxmox_automatic_storage_config:
+      - name: virtio0
+        size: "20"
+        disk: vda
+        bootloader: true
+        partitions:
+          - name: efi
+            mount: /boot/efi
+            size: 1024
+            fstype: efi
+            primary: true
+          - name: boot
+            mount: /boot
+            size: 1024
+            fstype: ext4
+            primary: true
+          - name: pv.root
+            size: 1024
+            grow: true
+            primary: true
+            type: pv
+        vg:
+          - name: system
+            lv:
+              - name: root
+                mount: /
+                size: 1024
+                grow: true
+                fstype: xfs
+              - name: log
+                mount: /var/log
+                size: 4096
+                fstype: xfs
+              - name: swap
+                mount: swap
+                size: 2048
+                fstype: swap
+    proxmox_automatic_networks:
+      - name: net0
+        bridge: vmbr1
+        vlanid: 3
+        ip: "192.0.2.15"
+        netmask: "255.255.255.0"
+        gateway: "192.0.2.1"
+    proxmox_automatic_users_merged:
+      - name: "litsadmin"
+        fullname: "LITS Admin"
+        password: "Example123!"
+        password_encrypted: false
+        groups:
+          - sudo
+        sudo_commands: "ALL"
+        sudo_nopasswd: true
+  tasks:
+    - name: Create temporary render directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: proxmox-automatic-tests
+      register: proxmox_automatic_test_render_dir
+
+    - name: Apply Debian grow-root scenario facts
+      ansible.builtin.set_fact:
+        proxmox_automatic_installer_backend: "debian13_preseed"
+        proxmox_automatic_install_source: "online"
+        proxmox_automatic_dhcp_enabled: false
+        proxmox_automatic_packages_effective: "{{ proxmox_automatic_debian_packages_default }}"
+        proxmox_automatic_packages_additional: []
+        proxmox_automatic_debian_partition_recipe_override: ""
+        proxmox_automatic_debian_late_command_extra: []
+        proxmox_automatic_additional_hosts: []
+        proxmox_automatic_storage_config:
+          - name: virtio0
+            size: "20"
+            disk: vda
+            bootloader: true
+            partitions:
+              - name: efi
+                mount: /boot/efi
+                size: 1024
+                fstype: efi
+                primary: true
+              - name: boot
+                mount: /boot
+                size: 1024
+                fstype: ext4
+                primary: true
+              - name: pv.root
+                size: 1024
+                grow: true
+                primary: true
+                type: pv
+            vg:
+              - name: system
+                lv:
+                  - name: root
+                    mount: /
+                    size: 1024
+                    grow: true
+                    fstype: xfs
+                  - name: log
+                    mount: /var/log
+                    size: 4096
+                    fstype: xfs
+                  - name: swap
+                    mount: swap
+                    size: 2048
+                    fstype: swap
+        proxmox_automatic_networks:
+          - name: net0
+            bridge: vmbr1
+            vlanid: 3
+            ip: "192.0.2.15"
+            netmask: "255.255.255.0"
+            gateway: "192.0.2.1"
+        proxmox_automatic_users_merged:
+          - name: "litsadmin"
+            fullname: "LITS Admin"
+            password: "Example123!"
+            password_encrypted: false
+            groups:
+              - sudo
+            sudo_commands: "ALL"
+            sudo_nopasswd: true
+
+    - name: Render Debian grow-root preseed template
+      ansible.builtin.template:
+        src: "{{ [playbook_dir, '..', 'templates', 'preseed.cfg.j2'] | path_join | realpath }}"
+        dest: "{{ proxmox_automatic_test_render_dir.path }}/preseed-grow-root.cfg"
+        mode: "0644"
+      vars:
+        template_render_time: "test"
+
+    - name: Read Debian grow-root preseed file
+      ansible.builtin.slurp:
+        src: "{{ proxmox_automatic_test_render_dir.path }}/preseed-grow-root.cfg"
+      register: proxmox_automatic_preseed_grow_root_rendered
+
+    - name: Assert Debian grow-root LV sizing
+      ansible.builtin.assert:
+        that:
+          - "'1074 1074 1074 fat32' in preseed_content"
+          - "'1074 1074 1074 ext4' in preseed_content"
+          - "'1074 100% 100% lvm' in preseed_content"
+          - "'11809 11809 11809 xfs' in preseed_content"
+          - "'4295 4295 4295 xfs' in preseed_content"
+          - "'2148 2148 2148 linux-swap' in preseed_content"
+      vars:
+        preseed_content: "{{ proxmox_automatic_preseed_grow_root_rendered.content | b64decode }}"
+
+    - name: Remove temporary render directory
+      ansible.builtin.file:
+        path: "{{ proxmox_automatic_test_render_dir.path }}"
+        state: absent

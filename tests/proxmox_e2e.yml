@@ -1,0 +1,359 @@
+---
+- name: Build dynamic inventory for Proxmox E2E matrix
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../defaults/main.yml
+    - proxmox_e2e_matrix.yml
+  vars:
+    proxmox_e2e_api_host: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_HOST') | default('', true) }}"
+    proxmox_e2e_api_user: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_USER') | default('', true) }}"
+    proxmox_e2e_api_password: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_PASSWORD') | default('', true) }}"
+    proxmox_e2e_api_token_id: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_TOKEN_ID') | default('', true) }}"
+    proxmox_e2e_api_token_secret: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_TOKEN_SECRET') | default('', true) }}"
+    proxmox_e2e_api_validate_certs: false
+    proxmox_e2e_hypervisor: "{{ lookup('env', 'PROXMOX_AUTOMATIC_HYPERVISOR') | default('', true) }}"
+    proxmox_e2e_vm_storage: "{{ lookup('env', 'PROXMOX_AUTOMATIC_PVE_VM_STORAGE') | default('volumes', true) }}"
+    proxmox_e2e_iso_storage: "{{ lookup('env', 'PROXMOX_AUTOMATIC_PVE_ISO_STORAGE') | default('local', true) }}"
+    proxmox_e2e_bridge: "{{ lookup('env', 'PROXMOX_AUTOMATIC_DEFAULTBRIDGE') | default('vmbr1', true) }}"
+    proxmox_e2e_gateway: "{{ lookup('env', 'PROXMOX_AUTOMATIC_GATEWAY') | default('192.0.2.1', true) }}"
+    proxmox_e2e_ssh_user: "{{ lookup('env', 'PROXMOX_E2E_SSH_USER') | default('litsadmin', true) }}"
+    proxmox_e2e_ssh_password: "{{ lookup('env', 'PROXMOX_E2E_SSH_PASSWORD') | default('Example123!', true) }}"
+    proxmox_e2e_user_ssh_key: "{{ lookup('env', 'PROXMOX_E2E_SSH_KEY') | default('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey ops@example.com', true) }}"
+    proxmox_e2e_storage_config:
+      - name: virtio0
+        size: "20"
+        disk: vda
+        bootloader: true
+        partitions:
+          - name: efi
+            mount: /boot/efi
+            size: 1024
+            fstype: efi
+            primary: true
+          - name: boot
+            mount: /boot
+            size: 1024
+            fstype: ext4
+            primary: true
+          - name: pv.root
+            size: 1024
+            grow: true
+            primary: true
+            type: pv
+        vg:
+          - name: system
+            lv:
+              - name: root
+                mount: /
+                size: 1024
+                grow: true
+                fstype: xfs
+              - name: log
+                mount: /var/log
+                size: 4096
+                fstype: xfs
+              - name: swap
+                mount: swap
+                size: 2048
+                fstype: swap
+  tasks:
+    - name: Validate required Proxmox E2E environment variables
+      ansible.builtin.assert:
+        that:
+          - proxmox_e2e_api_host | length > 0
+          - proxmox_e2e_hypervisor | length > 0
+          - (proxmox_e2e_api_token_id | length > 0 and proxmox_e2e_api_token_secret | length > 0) or (proxmox_e2e_api_user | length > 0 and proxmox_e2e_api_password | length > 0)
+        fail_msg: >-
+          Export PROXMOX_AUTOMATIC_API_HOST, PROXMOX_AUTOMATIC_HYPERVISOR and either
+          PROXMOX_AUTOMATIC_API_USER plus PROXMOX_AUTOMATIC_API_PASSWORD or
+          PROXMOX_AUTOMATIC_API_TOKEN_ID plus PROXMOX_AUTOMATIC_API_TOKEN_SECRET before
+          running the Proxmox E2E matrix.
+
+    - name: Assert Debian source ISOs exist on the controller
+      ansible.builtin.stat:
+        path: "{{ item.source_iso_path }}"
+      loop: "{{ proxmox_e2e_hosts | selectattr('backend', 'equalto', 'debian13_preseed') | list }}"
+      register: proxmox_e2e_debian_iso_stats
+
+    - name: Validate Debian source ISO availability
+      ansible.builtin.assert:
+        that:
+          - proxmox_e2e_debian_iso_stats.results | map(attribute='stat.exists') | min
+        fail_msg: >-
+          At least one Debian source ISO defined in tests/proxmox_e2e_matrix.yml is missing on the controller.
+
+    - name: Add Proxmox E2E hosts to dynamic inventory
+      ansible.builtin.add_host:
+        name: "{{ item.inventory_name }}"
+        groups: proxmox_e2e
+        ansible_connection: local
+        ansible_host: "{{ item.fqdn }}"
+        proxmox_automatic_api_host: "{{ proxmox_e2e_api_host }}"
+        proxmox_automatic_api_user: "{{ proxmox_e2e_api_user }}"
+        proxmox_automatic_api_password: "{{ proxmox_e2e_api_password }}"
+        proxmox_automatic_api_token_id: "{{ proxmox_e2e_api_token_id }}"
+        proxmox_automatic_api_token_secret: "{{ proxmox_e2e_api_token_secret }}"
+        proxmox_automatic_api_validate_certs: "{{ proxmox_e2e_api_validate_certs }}"
+        proxmox_automatic_hypervisor: "{{ proxmox_e2e_hypervisor }}"
+        proxmox_automatic_pve_vm_storage: "{{ proxmox_e2e_vm_storage }}"
+        proxmox_automatic_pve_iso_storage: "{{ proxmox_e2e_iso_storage }}"
+        proxmox_automatic_defaultbridge: "{{ proxmox_e2e_bridge }}"
+        proxmox_automatic_vmid: "{{ item.vmid }}"
+        proxmox_automatic_installer_backend: "{{ item.backend }}"
+        proxmox_automatic_install_source: "{{ item.install_source }}"
+        proxmox_automatic_kickstart_template: "{{ [playbook_dir, '..', 'templates', 'kickstart.cfg.j2'] | path_join | realpath }}"
+        proxmox_automatic_preseed_template: "{{ [playbook_dir, '..', 'templates', 'preseed.cfg.j2'] | path_join | realpath }}"
+        proxmox_automatic_vga: "std"
+        proxmox_automatic_source_iso_name: "{{ item.source_iso_name | default('') }}"
+        proxmox_automatic_source_iso_path: "{{ item.source_iso_path | default('') }}"
+        proxmox_automatic_networks:
+          - name: net0
+            bridge: "{{ proxmox_e2e_bridge }}"
+            vlanid: "{{ item.vlanid }}"
+            ip: "{{ item.ip }}"
+            netmask: "255.255.255.0"
+            gateway: "{{ proxmox_e2e_gateway }}"
+        proxmox_automatic_storage_config: "{{ proxmox_e2e_storage_config }}"
+        proxmox_automatic_users:
+          - name: "{{ proxmox_e2e_ssh_user }}"
+            fullname: "LITS Admin"
+            gecos: "LITS Admin"
+            shell: "/bin/bash"
+            uid: 1000
+            gid: 1000
+            groups:
+              - "{{ 'wheel' if item.backend == 'rocky_kickstart' else 'sudo' }}"
+            password: "{{ proxmox_e2e_ssh_password }}"
+            password_encrypted: false
+            sudo_commands: "ALL"
+            sudo_nopasswd: true
+            ssh_key: "{{ proxmox_e2e_user_ssh_key }}"
+            additional_ssh_keys: []
+        proxmox_automatic_ha_enabled: true
+        proxmox_automatic_ha_group_manage: true
+        proxmox_automatic_ha_group_auto: true
+        proxmox_automatic_ha_group_comment: "Codex E2E shared HA rule"
+        proxmox_automatic_ha_comment: "Codex E2E resource {{ item.inventory_name }}"
+        proxmox_e2e_expected_root_g: "{{ item.expected_root_g }}"
+        proxmox_e2e_expected_log_g: "{{ item.expected_log_g }}"
+        proxmox_e2e_expected_swap_g: "{{ item.expected_swap_g }}"
+        proxmox_e2e_primary_ip: "{{ item.ip }}"
+      loop: "{{ proxmox_e2e_hosts }}"
+
+- name: Deploy Proxmox E2E VM matrix
+  hosts: proxmox_e2e
+  gather_facts: false
+  vars_files:
+    - ../defaults/main.yml
+    - proxmox_e2e_matrix.yml
+  tasks:
+    - name: Resolve current E2E matrix entry
+      ansible.builtin.set_fact:
+        proxmox_e2e_current: "{{ proxmox_e2e_hosts | selectattr('inventory_name', 'equalto', inventory_hostname) | first }}"
+
+    - name: Pin repository template paths and E2E variables
+      ansible.builtin.set_fact:
+        ansible_host: "{{ proxmox_e2e_current.fqdn }}"
+        proxmox_automatic_api_host: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_HOST') }}"
+        proxmox_automatic_api_user: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_USER') | default('', true) }}"
+        proxmox_automatic_api_password: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_PASSWORD') | default('', true) }}"
+        proxmox_automatic_api_token_id: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_TOKEN_ID') | default('', true) }}"
+        proxmox_automatic_api_token_secret: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_TOKEN_SECRET') | default('', true) }}"
+        proxmox_automatic_hypervisor: "{{ lookup('env', 'PROXMOX_AUTOMATIC_HYPERVISOR') }}"
+        proxmox_automatic_pve_iso_storage: "{{ lookup('env', 'PROXMOX_AUTOMATIC_PVE_ISO_STORAGE') | default('local', true) }}"
+        proxmox_automatic_pve_vm_storage: "{{ lookup('env', 'PROXMOX_AUTOMATIC_PVE_VM_STORAGE') | default('volumes', true) }}"
+        proxmox_automatic_defaultbridge: "{{ lookup('env', 'PROXMOX_AUTOMATIC_DEFAULTBRIDGE') | default('vmbr1', true) }}"
+        proxmox_automatic_vga: "std"
+        proxmox_automatic_vmid: "{{ proxmox_e2e_current.vmid }}"
+        proxmox_automatic_installer_backend: "{{ proxmox_e2e_current.backend }}"
+        proxmox_automatic_install_source: "{{ proxmox_e2e_current.install_source }}"
+        proxmox_automatic_source_iso_name: "{{ proxmox_e2e_current.source_iso_name | default('') }}"
+        proxmox_automatic_source_iso_path: "{{ proxmox_e2e_current.source_iso_path | default('') }}"
+        proxmox_automatic_networks:
+          - name: net0
+            bridge: "{{ lookup('env', 'PROXMOX_AUTOMATIC_DEFAULTBRIDGE') | default('vmbr1', true) }}"
+            vlanid: "{{ proxmox_e2e_current.vlanid }}"
+            ip: "{{ proxmox_e2e_current.ip }}"
+            netmask: "255.255.255.0"
+            gateway: "{{ lookup('env', 'PROXMOX_AUTOMATIC_GATEWAY') | default('192.0.2.1', true) }}"
+        proxmox_automatic_storage_config:
+          - name: virtio0
+            size: "20"
+            disk: vda
+            bootloader: true
+            partitions:
+              - name: efi
+                mount: /boot/efi
+                size: 1024
+                fstype: efi
+                primary: true
+              - name: boot
+                mount: /boot
+                size: 1024
+                fstype: ext4
+                primary: true
+              - name: pv.root
+                size: 1024
+                grow: true
+                primary: true
+                type: pv
+            vg:
+              - name: system
+                lv:
+                  - name: root
+                    mount: /
+                    size: 1024
+                    grow: true
+                    fstype: xfs
+                  - name: log
+                    mount: /var/log
+                    size: 4096
+                    fstype: xfs
+                  - name: swap
+                    mount: swap
+                    size: 2048
+                    fstype: swap
+        proxmox_automatic_users:
+          - name: "{{ lookup('env', 'PROXMOX_E2E_SSH_USER') | default('litsadmin', true) }}"
+            fullname: "LITS Admin"
+            gecos: "LITS Admin"
+            shell: "/bin/bash"
+            uid: 1000
+            gid: 1000
+            groups:
+              - "{{ 'wheel' if proxmox_e2e_current.backend == 'rocky_kickstart' else 'sudo' }}"
+            password: "{{ lookup('env', 'PROXMOX_E2E_SSH_PASSWORD') | default('Example123!', true) }}"
+            password_encrypted: false
+            sudo_commands: "ALL"
+            sudo_nopasswd: true
+            ssh_key: "{{ lookup('env', 'PROXMOX_E2E_SSH_KEY') | default('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey ops@example.com', true) }}"
+            additional_ssh_keys: []
+        proxmox_automatic_ha_enabled: true
+        proxmox_automatic_ha_group_manage: true
+        proxmox_automatic_ha_group_auto: true
+        proxmox_automatic_ha_group_comment: "Codex E2E shared HA rule"
+        proxmox_automatic_ha_comment: "Codex E2E resource {{ inventory_hostname }}"
+        proxmox_e2e_expected_root_g: "{{ proxmox_e2e_current.expected_root_g }}"
+        proxmox_e2e_expected_log_g: "{{ proxmox_e2e_current.expected_log_g }}"
+        proxmox_e2e_expected_swap_g: "{{ proxmox_e2e_current.expected_swap_g }}"
+        proxmox_e2e_primary_ip: "{{ proxmox_e2e_current.ip }}"
+        proxmox_automatic_kickstart_template: "{{ [playbook_dir, '..', 'templates', 'kickstart.cfg.j2'] | path_join | realpath }}"
+        proxmox_automatic_preseed_template: "{{ [playbook_dir, '..', 'templates', 'preseed.cfg.j2'] | path_join | realpath }}"
+
+    - name: Include role tasks from repository root
+      ansible.builtin.include_tasks: ../tasks/main.yml
+
+- name: Verify Proxmox E2E VM matrix
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    proxmox_e2e_wait_timeout: 3600
+    proxmox_e2e_ssh_user: "{{ lookup('env', 'PROXMOX_E2E_SSH_USER') | default('litsadmin', true) }}"
+    proxmox_e2e_api_host: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_HOST') | default('', true) }}"
+    proxmox_e2e_api_user: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_USER') | default('', true) }}"
+    proxmox_e2e_api_password: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_PASSWORD') | default('', true) }}"
+    proxmox_e2e_api_token_id: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_TOKEN_ID') | default('', true) }}"
+    proxmox_e2e_api_token_secret: "{{ lookup('env', 'PROXMOX_AUTOMATIC_API_TOKEN_SECRET') | default('', true) }}"
+  tasks:
+    - name: Wait for SSH on each deployed VM
+      ansible.builtin.wait_for:
+        host: "{{ hostvars[item].proxmox_e2e_primary_ip }}"
+        port: 22
+        timeout: "{{ proxmox_e2e_wait_timeout }}"
+        delay: 5
+        sleep: 15
+        state: started
+      loop: "{{ groups['proxmox_e2e'] }}"
+
+    - name: Collect remote layout summaries
+      ansible.builtin.command:
+        cmd: >-
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+          -o ConnectTimeout=10
+          {{ proxmox_e2e_ssh_user }}@{{ hostvars[item].proxmox_e2e_primary_ip }}
+          python3 -c
+          "import json,subprocess;
+          def run(cmd): return subprocess.check_output(cmd, shell=True, text=True).strip();
+          lvs=json.loads(run('sudo lvs --reportformat json --units g --nosuffix -o lv_name,lv_size,vg_name'));
+          mounts={};
+          targets=['/','/var/log','/boot','/boot/efi'];
+          for target in targets:
+              fstype,size=run(f'findmnt -no FSTYPE,SIZE -T {target}').split(None,1);
+              mounts[target]={'fstype':fstype,'size':size};
+          print(json.dumps({'hostname':run('hostname -f || hostname'),'lvs':lvs['report'][0]['lv'],'mounts':mounts}))"
+      loop: "{{ groups['proxmox_e2e'] }}"
+      register: proxmox_e2e_layout_summaries
+      changed_when: false
+
+    - name: Assert remote layout summaries
+      ansible.builtin.assert:
+        that:
+          - summary.hostname == hostvars[item.item].ansible_host
+          - "(summary.lvs | selectattr('lv_name', 'equalto', 'root') | map(attribute='lv_size') | first | float) == (hostvars[item.item].proxmox_e2e_expected_root_g | float)"
+          - "(summary.lvs | selectattr('lv_name', 'equalto', 'log') | map(attribute='lv_size') | first | float) == (hostvars[item.item].proxmox_e2e_expected_log_g | float)"
+          - "(summary.lvs | selectattr('lv_name', 'equalto', 'swap') | map(attribute='lv_size') | first | float) == (hostvars[item.item].proxmox_e2e_expected_swap_g | float)"
+          - "summary.mounts['/']['fstype'] == 'xfs'"
+          - "summary.mounts['/var/log']['fstype'] == 'xfs'"
+          - "summary.mounts['/boot']['fstype'] == 'ext4'"
+          - "summary.mounts['/boot/efi']['fstype'] == 'vfat'"
+        fail_msg: "Unexpected guest layout for {{ item.item }}"
+      loop: "{{ proxmox_e2e_layout_summaries.results }}"
+      vars:
+        summary: "{{ item.stdout | from_json }}"
+
+    - name: Authenticate to Proxmox API for HA verification
+      ansible.builtin.uri:
+        url: "https://{{ proxmox_e2e_api_host }}:8006/api2/json/access/ticket"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          username: "{{ proxmox_e2e_api_user }}"
+          password: "{{ proxmox_e2e_api_password }}"
+        validate_certs: false
+      register: proxmox_e2e_ha_ticket
+      when:
+        - proxmox_e2e_api_token_id | length == 0
+
+    - name: Read HA rules from Proxmox
+      ansible.builtin.uri:
+        url: "https://{{ proxmox_e2e_api_host }}:8006/api2/json/cluster/ha/rules"
+        method: GET
+        headers: >-
+          {{
+            {'Authorization': 'PVEAPIToken=' ~ proxmox_e2e_api_token_id ~ '=' ~ proxmox_e2e_api_token_secret}
+            if proxmox_e2e_api_token_id | length > 0
+            else {'Cookie': 'PVEAuthCookie=' ~ proxmox_e2e_ha_ticket.json.data.ticket}
+          }}
+        validate_certs: false
+      register: proxmox_e2e_ha_rules
+
+    - name: Read HA resources from Proxmox
+      ansible.builtin.uri:
+        url: "https://{{ proxmox_e2e_api_host }}:8006/api2/json/cluster/ha/resources"
+        method: GET
+        headers: >-
+          {{
+            {'Authorization': 'PVEAPIToken=' ~ proxmox_e2e_api_token_id ~ '=' ~ proxmox_e2e_api_token_secret}
+            if proxmox_e2e_api_token_id | length > 0
+            else {'Cookie': 'PVEAuthCookie=' ~ proxmox_e2e_ha_ticket.json.data.ticket}
+          }}
+        validate_certs: false
+      register: proxmox_e2e_ha_resources
+
+    - name: Assert shared HA rule contains all E2E VMs
+      ansible.builtin.assert:
+        that:
+          - ha_rule is defined
+          - "ha_rule.resources.split(',') | sort == expected_resources | sort"
+          - "(proxmox_e2e_ha_resources.json.data | map(attribute='sid') | list | intersect(expected_resources) | length) == (expected_resources | length)"
+      vars:
+        expected_resources: "{{ groups['proxmox_e2e'] | map('extract', hostvars, 'proxmox_automatic_vmid') | map('string') | map('regex_replace', '^(.*)$', 'vm:\\1') | list }}"
+        ha_rule: >-
+          {{
+            proxmox_e2e_ha_rules.json.data
+            | selectattr('rule', 'equalto', 'ha-group-' ~ (hostvars[groups['proxmox_e2e'][0]].proxmox_automatic_hypervisor | regex_replace('\\..*$', '')))
+            | first
+          }}

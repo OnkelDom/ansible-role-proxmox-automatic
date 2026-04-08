@@ -22,6 +22,4 @@ rules:
     allowed-values: ['true', 'false', 'yes', 'no']
 
 ignore: |
-  .github/
-  tests/
   *.md

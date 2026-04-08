@@ -27,12 +27,16 @@ We welcome all kinds of contributions:
 # Install Ansible and tools
 pip install ansible ansible-lint yamllint
 
+# Install local ISO tooling on Debian/Ubuntu
+sudo apt-get update
+sudo apt-get install -y xorriso isolinux syslinux libarchive-tools
+
 # Clone repository
 git clone https://github.com/inframonks/ansible-role-proxmox-automatic.git
 cd ansible-role-proxmox-automatic
 
 # Install dependencies
-ansible-galaxy collection install community.general ansible.posix
+ansible-galaxy collection install -r collections/requirements.yml
 ```
 
 ### Development Environment
@@ -41,10 +45,19 @@ ansible-galaxy collection install community.general ansible.posix
 # Run linting
 yamllint .
 ansible-lint
+python3 -m py_compile library/proxmox_automatic_upload_iso.py
 
-# Run tests
-ansible-playbook tests/test.yml -i tests/inventory/hosts.yml --syntax-check
-ansible-playbook tests/test.yml -i tests/inventory/hosts.yml --check
+# Run CI-equivalent checks
+make ci
+
+# Run template rendering checks
+ansible-playbook tests/render_templates.yml
+
+# Optional controller-side media build checks
+ansible-playbook tests/build_media.yml
+
+# Optional Proxmox integration syntax checks
+make e2e-syntax
 ```
 
 ## 📝 Pull Request Process
@@ -73,13 +86,62 @@ git checkout -b feature/your-feature-name
 # Linting
 yamllint .
 ansible-lint
+python3 -m py_compile library/proxmox_automatic_upload_iso.py
 
 # Syntax Check
 ansible-playbook tests/test.yml --syntax-check
+ansible-playbook tests/render_templates.yml --syntax-check
+ansible-playbook tests/build_media.yml --syntax-check
 
-# Dry Run Test
-ansible-playbook tests/test.yml --check
+# Render and validate unattended installer configs
+ansible-playbook tests/render_templates.yml
+
+# Optional controller-side media build validation
+ansible-playbook tests/build_media.yml
+
+# Proxmox E2E syntax validation
+ansible-playbook tests/proxmox_e2e.yml --syntax-check
+ansible-playbook tests/proxmox_e2e_cleanup.yml --syntax-check
 ```
+
+### Real Proxmox E2E Matrix
+
+From a DevOps and system architecture perspective, the repository now contains a real Proxmox end-to-end matrix under:
+
+- `tests/proxmox_e2e.yml`
+- `tests/proxmox_e2e_cleanup.yml`
+- `tests/proxmox_e2e_matrix.yml`
+
+The matrix covers:
+
+- Rocky online
+- Rocky CDROM-only
+- Debian online
+- Debian CDROM-only
+
+The E2E playbook expects real Proxmox credentials via environment variables:
+
+```bash
+export PROXMOX_AUTOMATIC_API_HOST="pve.example.com"
+export PROXMOX_AUTOMATIC_API_USER="svc_ansible_rw@pam"
+export PROXMOX_AUTOMATIC_API_PASSWORD="..."
+export PROXMOX_AUTOMATIC_HYPERVISOR="pve"
+export PROXMOX_AUTOMATIC_PVE_ISO_STORAGE="local"
+export PROXMOX_AUTOMATIC_PVE_VM_STORAGE="volumes"
+export PROXMOX_AUTOMATIC_DEFAULTBRIDGE="vmbr1"
+export PROXMOX_AUTOMATIC_GATEWAY="192.0.2.1"
+export PROXMOX_E2E_SSH_USER="litsadmin"
+export PROXMOX_E2E_SSH_PASSWORD="..."
+```
+
+Run the lifecycle with:
+
+```bash
+ansible-playbook tests/proxmox_e2e_cleanup.yml
+ansible-playbook tests/proxmox_e2e.yml
+```
+
+The cleanup playbook removes the E2E VMs, the shared HA rule/resource state for that matrix, and the generated E2E installer ISOs on Proxmox storage. The deploy playbook creates and verifies the guests, including HA rule/resource aggregation and in-guest storage layout checks.
 
 ### 4. Create Pull Request
 
@@ -127,21 +189,26 @@ Fixes #123
 ### Local Tests
 
 ```bash
-# Complete test run
-make test  # if Makefile exists
+# CI-equivalent checks
+make ci
 
-# Or manually:
+# Optional extended local validation:
 yamllint .
 ansible-lint
+python3 -m py_compile library/proxmox_automatic_upload_iso.py
 ansible-playbook tests/test.yml --syntax-check
+ansible-playbook tests/render_templates.yml
+ansible-playbook tests/build_media.yml
 ```
 
 ### Test Environment
 
 For comprehensive tests you need:
-- Proxmox VE test environment
 - Ansible Controller (Linux/macOS)
-- Test inventory with at least one host
+- `xorriso`, `isolinux`, `syslinux`, `libarchive-tools` on the controller
+- GitHub Actions validates linting, syntax, and template rendering only
+- `tests/build_media.yml` is a controller-side media-build test and is intended for manual local validation
+- Proxmox VE is only required for integration tests beyond this repository
 
 ## 📖 Documentation
 
