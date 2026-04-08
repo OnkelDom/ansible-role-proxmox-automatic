@@ -1,0 +1,11 @@
+---
+proxmox_automatic_installer_backend: "rocky_kickstart"
+proxmox_automatic_source_iso_name: "rocky9.6-ks"
+proxmox_automatic_install_source: "online"
+proxmox_automatic_packages_default:
+  - ca-certificates
+  - lvm2
+  - openssh-server
+  - qemu-guest-agent
+  - vim-enhanced
+  - xfsprogs

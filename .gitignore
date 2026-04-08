@@ -61,6 +61,7 @@ playbooks/kickstart-files/
 playbooks/kickstart-isos/
 *.iso
 *.cfg
+!ansible.cfg
 
 # Log files
 *.log
@@ -84,3 +85,4 @@ Thumbs.db
 *.bak
 *.backup
 *~
+debian-13.3.0-amd64-netinst.iso

@@ -7,10 +7,10 @@
     proxmox_automatic_install_dependencies: false
     proxmox_automatic_api_host: "test.example.com"
     proxmox_automatic_api_password: "test-password"
-    
+
   tasks:
     - name: Include role (dependencies only)
-      include_role:
+      ansible.builtin.include_role:
         name: proxmox_automatic
         tasks_from: main
       tags:
@@ -18,7 +18,7 @@
       when: false  # Prevents actual VM creation in tests
 
     - name: Test variable merging
-      debug:
+      ansible.builtin.debug:
         msg: "Testing hierarchical configuration system"
       tags:
         - test

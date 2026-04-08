@@ -1,0 +1,8 @@
+---
+proxmox_automatic_networks:
+  - name: net0
+    bridge: vmbr1
+    vlanid: 3
+    ip: "192.0.2.14"
+    netmask: "255.255.255.0"
+    gateway: "192.0.2.1"

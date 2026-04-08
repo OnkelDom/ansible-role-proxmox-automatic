@@ -1,0 +1,51 @@
+---
+proxmox_e2e_hosts:
+  - inventory_name: rocky3014
+    fqdn: rocky01.example.com
+    backend: rocky_kickstart
+    install_source: online
+    source_iso_name: rocky9.6-ks
+    vmid: 3014
+    ip: 192.0.2.14
+    vlanid: 3
+    expected_root_g: 12
+    expected_log_g: 4
+    expected_swap_g: 2
+
+  - inventory_name: debian3015
+    fqdn: debian01.example.com
+    backend: debian13_preseed
+    install_source: online
+    source_iso_path: "{{ playbook_dir }}/../debian-13.3.0-amd64-netinst.iso"
+    source_iso_name: debian-13.3.0-amd64-netinst
+    vmid: 3015
+    ip: 192.0.2.15
+    vlanid: 3
+    expected_root_g: 11
+    expected_log_g: 4
+    expected_swap_g: 2
+
+  - inventory_name: rocky3016
+    fqdn: rocky02.example.com
+    backend: rocky_kickstart
+    install_source: cdrom
+    source_iso_name: rocky9.6-ks
+    vmid: 3016
+    ip: 192.0.2.16
+    vlanid: 3
+    expected_root_g: 12
+    expected_log_g: 4
+    expected_swap_g: 2
+
+  - inventory_name: debian3017
+    fqdn: debian02.example.com
+    backend: debian13_preseed
+    install_source: cdrom
+    source_iso_path: "{{ playbook_dir }}/../debian-13.4.0-amd64-DVD-1.iso"
+    source_iso_name: debian-13.4.0-amd64-DVD-1
+    vmid: 3017
+    ip: 192.0.2.17
+    vlanid: 3
+    expected_root_g: 11
+    expected_log_g: 4
+    expected_swap_g: 2

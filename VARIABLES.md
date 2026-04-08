@@ -4,9 +4,13 @@ Complete documentation of all configuration variables for the `proxmox_automatic
 
 > **📖 Quick Links:** [Main README](README.md) | [Examples](README.md#-examples)
 
+A complete multi-host inventory example with `group_vars` and `host_vars` is available in [examples/inventory](/Users/dominik.lenhardt/git/ansible_roles/ansible-role-proxmox-automatic/examples/inventory).
+
 ## Table of Contents
 
 - [Core Configuration](#core-configuration)
+- [Backend Configuration](#backend-configuration)
+- [Debian 13 Backend](#debian-13-backend)
 - [Proxmox API Configuration](#proxmox-api-configuration)
 - [VM Configuration](#vm-configuration)
 - [Storage Configuration](#storage-configuration)
@@ -38,9 +42,18 @@ Complete documentation of all configuration variables for the `proxmox_automatic
 proxmox_automatic_install_dependencies: true
 ```
 
+##### `proxmox_automatic_installer_backend`
+**Default:** `"rocky_kickstart"`  
+**Description:** Selects the unattended installer backend. Supported values are `rocky_kickstart` and `debian13_preseed`.
+
+**Example:**
+```yaml
+proxmox_automatic_installer_backend: "debian13_preseed"
+```
+
 ##### `proxmox_automatic_files_dir`
 **Default:** `"kickstart-files"`  
-**Description:** Path for Kickstart files
+**Description:** Path for generated Kickstart/Preseed files
 
 **Example:**
 ```yaml
@@ -56,16 +69,153 @@ proxmox_automatic_files_dir: "/tmp/ks-files"
 proxmox_automatic_iso_dir: "/var/lib/isos"
 ```
 
+##### `proxmox_automatic_iso_build_dir`
+**Default:** `"kickstart-isos/build"`  
+**Description:** Temporary workspace for ISO extraction and remastering on the controller.
+
+**Example:**
+```yaml
+proxmox_automatic_iso_build_dir: "/var/tmp/proxmox-automatic"
+```
+
 ##### `proxmox_automatic_iso_name`
 **Default:** `"rocky9.6-ks"`  
-**Description:** Name of the Kickstart ISO file (without .iso)
+**Description:** Backward-compatible source installer ISO name (without `.iso`).
 
 **Example:**
 ```yaml
 proxmox_automatic_iso_name: "rocky9-custom"
 ```
 
-### Proxmox API Configuration
+##### `proxmox_automatic_source_iso_name`
+**Default:** `"rocky9.6-ks"`  
+**Description:** Source installer ISO name used by the selected backend.
+
+##### `proxmox_automatic_source_iso_path`
+**Default:** `""`  
+**Description:** Optional absolute path to a local source ISO on the controller. Recommended for Debian 13 remastering.
+
+**Example:**
+```yaml
+proxmox_automatic_source_iso_path: "/srv/iso/debian-13.0.0-amd64-netinst.iso"
+```
+
+##### `proxmox_automatic_generated_iso_name`
+**Default:** `""`  
+**Description:** Optional override for the generated installer artifact name. If unset, the role derives a unique artifact name from `ansible_host` (FQDN recommended).
+
+**Automatic default naming:**
+- Rocky Kickstart ISO: `ks-<ansible_host>`
+- Debian Preseed ISO: `preseed-<ansible_host>`
+
+##### `proxmox_automatic_install_source`
+**Default:** `"online"`  
+**Description:** Selects whether package installation should use external repositories or only the attached installation media. Supported values are `online` and `cdrom`.
+
+**Operational guidance:**
+- `online` keeps the current mirror-based workflow.
+- `cdrom` is suitable for disconnected environments.
+- For Debian, `cdrom` mode requires a source ISO that actually contains the required packages. A full DVD or curated custom ISO is recommended over `netinst`.
+- In Debian `cdrom` mode, the installer package set is intentionally reduced to packages that are expected on the attached medium. Packages such as `qemu-guest-agent` should be installed afterwards through Ansible if the ISO does not provide them.
+
+##### `proxmox_automatic_kickstart_template`
+**Default:** `"kickstart.cfg.j2"`  
+**Description:** Template used by the Rocky Kickstart backend.
+
+##### `proxmox_automatic_preseed_template`
+**Default:** `"preseed.cfg.j2"`  
+**Description:** Template used by the Debian 13 Preseed backend.
+
+##### `proxmox_automatic_skip_iso_upload`
+**Default:** `false`  
+**Description:** Skips ISO upload to Proxmox. Intended for controller-side tests and local artifact validation.
+
+## Backend Configuration
+
+### Rocky / RHEL Source ISO Behavior
+
+For `rocky_kickstart`, the role generates only the second config CD and does not modify the primary installer ISO.
+
+Operationally this means:
+
+- the primary Rocky/RHEL ISO must already be prepared with `inst.ks=...`
+- the generated second ISO uses label `KS_<ansible_host>`
+- the Kickstart file is stored as `/ks.cfg`
+- `proxmox_automatic_install_source: cdrom` makes Anaconda install only from the attached installer media
+- `proxmox_automatic_install_source: online` keeps URL and repository configuration active
+
+Recommended boot parameter pattern:
+
+```text
+inst.ks=hd:LABEL=KS_<ansible_host>:/ks.cfg
+```
+
+Example:
+
+```text
+inst.ks=hd:LABEL=KS_swarm01.lenmail.de:/ks.cfg
+```
+
+If the primary ISO is not adapted in both BIOS and UEFI bootloader entries, the installer will start interactively.
+
+## Debian 13 Backend
+
+For `debian13_preseed`, the role remasters the Debian installer ISO on the controller and injects `preseed.cfg` plus the required boot parameters automatically.
+
+From a system architecture perspective, the Debian backend handles networking in two phases:
+
+- the installer itself uses the primary NIC, preferring `net0`
+- additional NICs from `proxmox_automatic_networks` are rendered into `/etc/network/interfaces` during `late_command`
+
+That means static multi-NIC server layouts are supported for the installed system even though the installer continues to operate on the primary interface only.
+
+##### `proxmox_automatic_debian_suite`
+**Default:** `"trixie"`  
+**Description:** Debian release codename used by the Preseed backend.
+
+##### `proxmox_automatic_debian_mirror`
+**Default:** `"deb.debian.org"`  
+**Description:** Debian package mirror host.
+
+##### `proxmox_automatic_debian_mirror_directory`
+**Default:** `"/debian"`  
+**Description:** Debian package mirror path.
+
+##### `proxmox_automatic_debian_security_host`
+**Default:** `"security.debian.org"`  
+**Description:** Debian security mirror host.
+
+This variable is ignored when `proxmox_automatic_install_source` is set to `cdrom`.
+
+##### `proxmox_automatic_debian_tasksel`
+**Default:** `[]`  
+**Description:** Tasksel roles selected during Debian installation. The default stays empty to keep the installer path minimal and reproducible on Proxmox.
+
+##### `proxmox_automatic_debian_packages_default`
+**Default:** backend-defined package list  
+**Description:** Debian-specific default packages used when `proxmox_automatic_packages_default` is not explicitly set.
+
+##### `proxmox_automatic_debian_partition_recipe_override`
+**Default:** `""`  
+**Description:** Raw `partman-auto/expert_recipe` override for hosts where the generated LVM recipe is not sufficient.
+
+##### `proxmox_automatic_debian_late_command_extra`
+**Default:** `[]`  
+**Description:** Additional raw commands appended to `preseed/late_command`.
+
+##### `proxmox_automatic_debian_purge_microcode`
+**Default:** `true`  
+**Description:** Purges guest CPU microcode packages during `late_command` and rebuilds `initramfs` plus GRUB. This avoids broken Debian 13 initramfs artifacts observed on Proxmox/QEMU virtual CPUs when `intel-microcode` is auto-installed.
+
+##### `proxmox_automatic_debian_interface_prefix`
+**Default:** `"enp6s"`  
+**Description:** Prefix used to derive predictable interface names from `net0`, `net1`, and so on.
+
+##### `proxmox_automatic_debian_interface_index_start`
+**Default:** `18`  
+**Description:** Start index used when translating `net0` to Debian installer NIC names.
+
+## Proxmox API Configuration
 
 ##### `proxmox_automatic_api_host`
 **Default:** *required*  
@@ -880,7 +1030,7 @@ proxmox_automatic_dnf_recipients:
 
 ##### `proxmox_automatic_ha_enabled`
 **Default:** `true`  
-**Description:** Enable High Availability for the VM. When enabled, the VM will be added to a Proxmox HA group.
+**Description:** Enable High Availability for the VM. When enabled, the VM will be added as a Proxmox HA resource and attached to a shared HA rule.
 
 **Example:**
 ```yaml
@@ -889,32 +1039,32 @@ proxmox_automatic_ha_enabled: false  # Disable HA
 
 ##### `proxmox_automatic_ha_group_manage`
 **Default:** `true`  
-**Description:** Automatically create/manage the HA group if it doesn't exist. When enabled, the role will ensure the HA group is created with the specified configuration before adding VMs to it.
+**Description:** Automatically create/manage the HA rule if it doesn't exist. When enabled, the role will ensure the HA rule is created with the specified configuration before adding VMs to it.
 
 **Example:**
 ```yaml
-proxmox_automatic_ha_group_manage: false  # Use existing HA groups only
+proxmox_automatic_ha_group_manage: false  # Use existing HA rules only
 ```
 
 ##### `proxmox_automatic_ha_group_auto`
 **Default:** `true`  
-**Description:** Automatically generate one HA group per hypervisor. Each VM will be assigned to the HA group of its hypervisor with that node as primary (priority 0). Group names follow the pattern `ha-group-<hypervisor>` (e.g., `ha-group-srv-hyp-01`).
+**Description:** Automatically generate one shared HA rule per hypervisor. Each VM will be assigned to the HA rule of its hypervisor. Rule names follow the pattern `ha-group-<hypervisor>` (e.g., `ha-group-srv-hyp-01`).
 
 **How it works:**
 - Collects all unique hypervisors from the play
-- Creates one HA group per hypervisor
-- Primary node (where VMs run) gets priority 0
-- Other cluster nodes get ascending priorities (1, 2, 3, ...)
-- VMs automatically join their hypervisor's HA group
+- Creates one shared HA rule per hypervisor or explicit rule profile
+- The preferred node is derived from `proxmox_automatic_hypervisor`
+- Other known hypervisors in the same play become lower-priority failover candidates
+- VMs with identical effective rule settings share one HA rule
 
 **Example:**
 ```yaml
-proxmox_automatic_ha_group_auto: false  # Use manual HA group assignment
+proxmox_automatic_ha_group_auto: false  # Use manual HA rule assignment
 ```
 
 ##### `proxmox_automatic_ha_group`
 **Default:** `""`  
-**Description:** Name of the HA group to assign the VM to. If `proxmox_automatic_ha_group_manage` is `false`, the group must already exist in the Proxmox cluster.
+**Description:** Name of the HA rule to assign the VM to. If `proxmox_automatic_ha_group_manage` is `false`, the rule must already exist in the Proxmox cluster.
 
 **Example:**
 ```yaml
@@ -923,7 +1073,7 @@ proxmox_automatic_ha_group: "ha-group-production"
 
 ##### `proxmox_automatic_ha_group_nodes`
 **Default:** `""`  
-**Description:** Comma-separated list of Proxmox nodes with their priorities for the HA group. Lower priority values indicate preferred nodes (0 = most preferred). Only used when `proxmox_automatic_ha_group_manage` is `true`.
+**Description:** Comma-separated list of Proxmox nodes with their priorities for the HA rule. Lower priority values indicate preferred nodes (0 = most preferred). Only used when `proxmox_automatic_ha_group_manage` is `true`.
 
 **Format:** `"node1:priority1,node2:priority2,node3:priority3"`
 
@@ -934,7 +1084,7 @@ proxmox_automatic_ha_group_nodes: "pve-node1:0,pve-node2:1,pve-node3:2"
 
 ##### `proxmox_automatic_ha_group_nofailback`
 **Default:** `false`  
-**Description:** If true, the HA manager won't automatically migrate resources back to higher-priority nodes after they become available again. Only used when managing the HA group.
+**Description:** Legacy HA-group compatibility flag. It is kept for backward compatibility but is not currently applied to Proxmox HA rules.
 
 **Example:**
 ```yaml
@@ -943,7 +1093,7 @@ proxmox_automatic_ha_group_nofailback: true
 
 ##### `proxmox_automatic_ha_group_restricted`
 **Default:** `false`  
-**Description:** If true, only resources assigned to this HA group can run on the specified nodes. Only used when managing the HA group.
+**Description:** If true, only resources assigned to this HA rule can run on the specified nodes. Only used when managing the HA rule.
 
 **Example:**
 ```yaml
@@ -952,11 +1102,11 @@ proxmox_automatic_ha_group_restricted: true
 
 ##### `proxmox_automatic_ha_group_comment`
 **Default:** `""`  
-**Description:** Optional comment for the HA group. Only used when managing the HA group.
+**Description:** Optional comment for the HA rule. Only used when managing the HA rule.
 
 **Example:**
 ```yaml
-proxmox_automatic_ha_group_comment: "Production HA group for critical services"
+proxmox_automatic_ha_group_comment: "Production HA rule for critical services"
 ```
 
 ##### `proxmox_automatic_ha_state`

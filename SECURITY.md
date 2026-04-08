@@ -65,10 +65,10 @@ Instead:
 **❌ Never in plaintext:**
 ```yaml
 # WRONG - passwords in plaintext
-proxmox_automatic_api_password: "my-password"
+proxmox_automatic_api_password: "example-password"
 proxmox_automatic_users:
   - name: admin
-    password: "admin123"
+    password: "example-password"
 ```
 
 **✅ Use Ansible Vault:**

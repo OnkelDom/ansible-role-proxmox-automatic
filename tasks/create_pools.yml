@@ -26,7 +26,7 @@
   tags:
     - proxmox_automatic_pools
 
-- name: "Ensure VM pool {{ item }} exists"
+- name: "Ensure VM pools exist"
   community.proxmox.proxmox_pool:
     api_host: "{{ proxmox_automatic_api_host }}"
     api_user: "{{ proxmox_automatic_api_user }}"

@@ -1,0 +1,68 @@
+---
+proxmox_automatic_api_host: "pve.example.com"
+proxmox_automatic_api_user: "svc_ansible_rw@pam"
+proxmox_automatic_api_password: "{{ vault_proxmox_automatic_api_password }}"
+proxmox_automatic_api_validate_certs: false
+
+proxmox_automatic_hypervisor: "pve"
+proxmox_automatic_pve_iso_storage: "local"
+proxmox_automatic_pve_vm_storage: "volumes"
+proxmox_automatic_pve_network_bridge: "vmbr1"
+
+proxmox_automatic_install_dependencies: false
+proxmox_automatic_ha_enabled: true
+proxmox_automatic_ha_group_auto: true
+proxmox_automatic_ha_group_manage: true
+
+proxmox_automatic_language: "en_US.UTF-8"
+proxmox_automatic_timezone: "Europe/Berlin"
+proxmox_automatic_keyboard_layout: "de"
+
+proxmox_automatic_users:
+  - name: "litsadmin"
+    fullname: "LITS Admin"
+    password: "{{ vault_litsadmin_password_hash }}"
+    password_encrypted: true
+    groups:
+      - sudo
+    sudo_commands: "ALL"
+    sudo_nopasswd: true
+    ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleReplaceMe ops@example.com"
+
+proxmox_automatic_storage_config_host_vars:
+  - name: virtio0
+    size: "20"
+    disk: vda
+    bootloader: true
+    partitions:
+      - name: efi
+        mount: /boot/efi
+        size: 1024
+        fstype: efi
+        primary: true
+      - name: boot
+        mount: /boot
+        size: 1024
+        fstype: ext4
+        primary: true
+      - name: pv.root
+        size: 1024
+        grow: true
+        primary: true
+        type: pv
+    vg:
+      - name: system
+        lv:
+          - name: root
+            mount: /
+            size: 12288
+            grow: true
+            fstype: xfs
+          - name: log
+            mount: /var/log
+            size: 4096
+            fstype: xfs
+          - name: swap
+            mount: swap
+            size: 2048
+            fstype: swap

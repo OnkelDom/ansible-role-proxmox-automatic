@@ -3,14 +3,46 @@
 # Set to true to automatically install required packages (xorriso, syslinux) on the Ansible controller
 proxmox_automatic_install_dependencies: false
 
+proxmox_automatic_installer_backend: "rocky_kickstart"
 proxmox_automatic_files_dir: "kickstart-files"
 proxmox_automatic_iso_dir: "kickstart-isos"
+proxmox_automatic_iso_build_dir: "{{ proxmox_automatic_iso_dir }}/build"
 # VM Deployment Configuration
 proxmox_automatic_first_disk_size: "20"  # IN GB
 proxmox_automatic_pve_iso_storage: "cephfs"
 proxmox_automatic_pve_vm_storage: "volumes"
 proxmox_automatic_defaultbridge: "vmbr1"
 proxmox_automatic_iso_name: "rocky9.6-ks"
+proxmox_automatic_source_iso_name: "{{ proxmox_automatic_iso_name }}"
+proxmox_automatic_source_iso_path: ""
+proxmox_automatic_generated_iso_name: ""
+proxmox_automatic_install_source: "online"
+proxmox_automatic_kickstart_template: "kickstart.cfg.j2"
+proxmox_automatic_preseed_template: "preseed.cfg.j2"
+proxmox_automatic_skip_iso_upload: false
+proxmox_automatic_efi_pre_enrolled_keys: "{{ proxmox_automatic_installer_backend != 'debian13_preseed' }}"
+proxmox_automatic_vga: "{{ 'std' if proxmox_automatic_installer_backend == 'debian13_preseed' else 'default' }}"
+
+proxmox_automatic_debian_suite: "trixie"
+proxmox_automatic_debian_mirror: "deb.debian.org"
+proxmox_automatic_debian_mirror_directory: "/debian"
+proxmox_automatic_debian_security_host: "security.debian.org"
+proxmox_automatic_debian_tasksel: []
+proxmox_automatic_debian_packages_default:
+  - ca-certificates
+  - lvm2
+  - openssh-server
+  - qemu-guest-agent
+  - sudo
+  - vim
+  - xfsprogs
+proxmox_automatic_debian_interface_prefix: "enp6s"
+proxmox_automatic_debian_interface_index_start: 18
+proxmox_automatic_debian_partition_recipe_override: ""
+proxmox_automatic_debian_late_command_extra: []
+proxmox_automatic_debian_disable_network_manager: true
+proxmox_automatic_debian_root_login: false
+proxmox_automatic_debian_purge_microcode: true
 
 # Api Access
 proxmox_automatic_api_user: svc_ansible_rw@pam
@@ -54,31 +86,31 @@ proxmox_automatic_additional_hosts: []
 # High Availability (HA) Configuration
 proxmox_automatic_ha_enabled: true
 
-# HA Group Management
+# HA Rule Management
 proxmox_automatic_ha_group_manage: true
-# Set to true to automatically create/manage the HA group
+# Set to true to automatically create/manage the HA rule
 
 proxmox_automatic_ha_group_auto: true
-# If true, automatically generate HA group name from hypervisor name
+# If true, automatically generate HA rule name from hypervisor name
 # Format: "ha-group-<hypervisor>" (e.g., "ha-group-srv-hyp-01")
 
 proxmox_automatic_ha_group: ""
 # Example: "ha-group-01"
-# If empty and ha_group_auto is true, will be auto-generated
+# If empty and ha_group_auto is true, the HA rule name will be auto-generated
 
 proxmox_automatic_ha_group_nodes: ""
 # Example: "pve-node1:0,pve-node2:1,pve-node3:2"
-# Format: "node:priority" (lower priority = preferred node)
-# If empty and ha_group_auto is true, will be auto-generated from all cluster nodes
+# Format: "node:priority" (lower priority = preferred node, converted internally for Proxmox HA rules)
+# If empty and ha_group_auto is true, nodes will be auto-generated from all hypervisors visible in the play
 
 proxmox_automatic_ha_group_nofailback: false
-# If true, the HA manager won't migrate back to preferred nodes
+# Legacy compatibility flag from HA groups; currently not applied to Proxmox HA rules
 
 proxmox_automatic_ha_group_restricted: false
-# If true, only resources in this group can run on these nodes
+# If true, only resources in this HA rule can run on the specified nodes
 
 proxmox_automatic_ha_group_comment: ""
-# Optional comment for the HA group
+# Optional comment for the HA rule
 
 # HA Resource Configuration
 proxmox_automatic_ha_state: "started"
@@ -135,7 +167,7 @@ proxmox_automatic_minimal_environment: "@^minimal-environment"
 
 proxmox_automatic_vcpu: 2
 proxmox_automatic_memory: 2048  # IN MB
-proxmox_automatic_dnf_automatic_enabled: true
+proxmox_automatic_dnf_automatic_enabled: false
 
 # User Configuration - Hierarchical System
 # Define users to be created during installation
@@ -153,8 +185,6 @@ proxmox_automatic_users:
     sudo_commands: "NOPASSWD: ALL"  # NOPASSWD: ALL, or specific commands like "/bin/systemctl, /usr/bin/docker"
     sudo_nopasswd: true
     ssh_key: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC3..."
-    generate_vimcfg: true
-    generate_tmuxcfg: true
     email: "mail@local.host"
     additional_ssh_keys: []
 
@@ -212,76 +242,18 @@ proxmox_automatic_storage_config_defaults:
 
 # Package Management
 # Default packages installed on all VMs (base system)
-proxmox_automatic_packages_default:
-  # Essential system packages
-  - bash-completion
-  - bzip2
-  - curl
-  - e2fsprogs
-  - fontconfig
-  - git
-  - gzip
-  - lsof
+proxmox_automatic_packages_default_rocky_kickstart:
+  - ca-certificates
   - lvm2
-  - net-tools
-  - policycoreutils
-  - python3
-  - python3-pip
-  - python3-policycoreutils
+  - openssh-server
   - qemu-guest-agent
-  - rsync
-  - selinux-policy
-  - tar
-  - unzip
-  - vim
   - vim-enhanced
-  - wget
   - xfsprogs
-  - xz
-  # Network & Debug tools
-  - bind-utils
-  - cifs-utils
-  - expect
-  - ipmitool
-  - mtr
-  - nc
-  - net-snmp-utils
-  - nfs-utils
-  - nmap
-  - nmap-ncat
-  - tcpdump
-  - telnet
-  - whois
-  # Monitoring & Diagnosis
-  - strace
 
-  - tmux
-  - tree
-  # Mail & Communication
-  - s-nail
-  # Archive & File handling
-  - dos2unix
-  # Packages to remove
-  - -cockpit
-  - -postfix
-  - -sendmail
+proxmox_automatic_packages_default: []
 
-proxmox_automatic_enable_epel: true
-proxmox_automatic_epel_packages:
-  - jq              # JSON processor
-  - iftop           # Netzwerk-Monitoring
-  - iperf3          # Netzwerk-Performance-Tool
-  - mtr             # Network diagnostic tool
-  - swaks           # SMTP test tool
-  - htop            # Besserer top
-  - iotop           # I/O monitoring
-  - tig             # Git TUI
-  - msmtp           # SMTP client (braucht du für dein Mail-Setup!)
-  - msmtp-mta       # msmtp als alternatives MTA
-  - p7zip           # 7-Zip Archiver
-  - dstat           # (veraltet, aber noch in EPEL)
-  - tig             # Git TUI
-  - swaks           # SMTP test tool
+proxmox_automatic_enable_epel: false
+proxmox_automatic_epel_packages: []
 
 # Additional packages (can be extended via group_vars/host_vars)
 proxmox_automatic_packages_additional: []

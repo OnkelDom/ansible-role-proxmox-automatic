@@ -18,7 +18,7 @@ timesource --ntp-server {{ ntp }}
 
 # NETWORK, SELINUX, FIREWALL
 # Multi-interface network configuration with configurable interface naming
-{% if proxmox_automatic_dhcp_enabled %}
+{% if proxmox_automatic_dhcp_enabled | bool %}
 network --bootproto=dhcp --device=enp6s18 --onboot=on --hostname={{ ansible_host }}{% if proxmox_automatic_ipv6_enabled %} --ipv6=auto{% endif %}
 
 {% else %}
@@ -111,7 +111,9 @@ logvol {{ lv.mount }}  --label={{ lv.name }}      --size={{ lv.size }}{% if lv.f
 {% endfor %}
 
 # INSTALLATION SOURCE, EXTRA REPOSITOROIES, PACKAGE GROUPS, PACKAGES
-# Installation Source
+{% if proxmox_automatic_install_source == 'cdrom' %}
+cdrom
+{% else %}
 {% if proxmox_automatic_url_mirrorlist is defined and proxmox_automatic_url_mirrorlist != "" %}
 url --mirrorlist={{ proxmox_automatic_url_mirrorlist }}
 {% endif %}
@@ -119,16 +121,15 @@ url --mirrorlist={{ proxmox_automatic_url_mirrorlist }}
 url --url={{ proxmox_automatic_url_baseos }}
 {% endif %}
 
-# Repositories - Automatisch per Schleife eingefügt
 {% for repo in proxmox_automatic_repos %}
 repo --name={{ repo.name }}{% if repo.mirrorlist is defined %} --mirrorlist={{ repo.mirrorlist }}{% endif %}{% if repo.baseurl is defined %} --baseurl={{ repo.baseurl }}{% endif %}{% if repo.cost is defined %} --cost={{ repo.cost }}{% endif %}
 
 {% endfor %}
+{% endif %}
 
 # Remove `@guest-agents` group if this is not a VM.
 %packages --retries={{ proxmox_automatic_package_retries }} --timeout={{ proxmox_automatic_package_timeout }} --inst-langs={{ proxmox_automatic_install_languages }}
 {{ proxmox_automatic_minimal_environment }}
-kernel-devel
 openssh-server
 {% if proxmox_automatic_dnf_automatic_enabled %}
 dnf-automatic
@@ -212,248 +213,7 @@ echo "$(date): Starting post-installation configuration" >> /root/anaconda-ks-po
 {%   endfor %}
 {% endif %}
 
-{% if proxmox_automatic_enable_epel %}
-# ===== EPEL Repository aktivieren =====
-echo "$(date): Installing EPEL repository" >> /root/anaconda-ks-post.log
-/usr/bin/dnf install -y epel-release
-/usr/bin/dnf makecache
-
-# ===== EPEL-Pakete nachinstallieren =====
-echo "$(date): Installing EPEL packages" >> /root/anaconda-ks-post.log
-{%   if proxmox_automatic_epel_packages | length > 0 %}
-/usr/bin/dnf install -y \
-{%     for package in proxmox_automatic_epel_packages %}
-    {{ package }}{{ '' if loop.last else ' \\' }}
-{%     endfor %}
-{%   endif %}
-{% endif %}
-
-# Create Vim configuration for root user
-/usr/bin/cat > /root/.vimrc << 'EOF'
-set laststatus=2 " Always display the statusline in all windows
-set showtabline=2 " Always display the tabline, even if there is only one tab
-set noshowmode " Hide the default mode text (e.g. -- INSERT -- below the statusline)
-set t_Co=256
-set tabstop=4
-set shiftwidth=4
-set expandtab
-set smartindent
-set paste
-set number
-set hlsearch
-:nmap <C-N><C-I> :set invrelativenumber<CR>
-:nmap <C-N><C-N> :set invnumber<CR>
-set laststatus=2
-set t_Co=256
-" colorscheme
-colorscheme slate
-filetype on
-filetype plugin on
-autocmd FileType yaml setlocal shiftwidth=2 tabstop=2
-autocmd FileType yml setlocal shiftwidth=2 tabstop=2
-autocmd FileType json setlocal shiftwidth=2 tabstop=2
-autocmd FileType j2 setlocal shiftwidth=2 tabstop=2
-syntax on
-EOF
-
-{% if user.generate_vimcfg | default(true) %}
-# Create Vim configuration for user {{ user.name }}
-/usr/bin/cat > /home/{{ user.name }}/.vimrc << 'EOF'
-set laststatus=2 " Always display the statusline in all windows
-set showtabline=2 " Always display the tabline, even if there is only one tab
-set noshowmode " Hide the default mode text (e.g. -- INSERT -- below the statusline)
-set t_Co=256
-set tabstop=4
-set shiftwidth=4
-set expandtab
-set smartindent
-set paste
-set number
-set hlsearch
-:nmap <C-N><C-I> :set invrelativenumber<CR>
-:nmap <C-N><C-N> :set invnumber<CR>
-set laststatus=2
-set t_Co=256
-" colorscheme
-colorscheme slate
-filetype on
-filetype plugin on
-autocmd FileType yaml setlocal shiftwidth=2 tabstop=2
-autocmd FileType yml setlocal shiftwidth=2 tabstop=2
-autocmd FileType json setlocal shiftwidth=2 tabstop=2
-autocmd FileType j2 setlocal shiftwidth=2 tabstop=2
-syntax on
-" csv plugin
-hi CSVColumnEven        ctermbg=0 ctermfg=10
-hi CSVColumnOdd         ctermbg=0 ctermfg=14
-hi CSVColumnHeaderEven  ctermbg=0 ctermfg=2
-hi CSVColumnHeaderOdd   ctermbg=0 ctermfg=6
-EOF
-/usr/bin/chown {{ user.name }}:{{ user.name }} /home/{{ user.name }}/.vimrc
-{% endif %}
-
-{% if user.generate_tmuxcfg | default(true) %}
-# Create tmux configuration for user {{ user.name }}
-/usr/bin/cat > /home/{{ user.name }}/.tmux.conf << 'EOF'
-# last active window
-bind-key C-a last-window
-# Bind function keys to select windows
-# -n means - no need to press ^B first.
-bind 1 select-window -t 1
-bind 2 select-window -t 2
-bind 3 select-window -t 3
-bind 4 select-window -t 4
-bind 5 select-window -t 5
-bind 6 select-window -t 6
-bind 7 select-window -t 7
-bind 8 select-window -t 8
-bind 9 select-window -t 9
-bind 0 select-window -t 10
-# bind meta-cursor to select-pane
-bind -n M-Up select-pane -U
-bind -n M-Down select-pane -D
-bind -n M-Left select-pane -L
-bind -n M-Right select-pane -R
-# | and - for pane splitting
-unbind % # Remove default binding since we�re replacing
-bind | split-window -h
-# of course this looses "delete buffer"
-bind - split-window -v
-# and synchronize (global input)
-bind g set-window-option synchronize-panes
-# open multi-ssh to somewhere (see my ms binary)
-bind S command-prompt -p "Multi-SSH Target: " "split-window -d 'exec bash -c \"~/.ms.sh %1\"'"
-# new-window with command
-bind C command-prompt -p "Command: " "new-window -n %1 'exec %1'"
-# ctrl+c to send to clipboard
-bind C-c run "tmux save-buffer - | xclip -i -sel clipboard"
-# ctrl+v to paste from clipboard
-bind C-v run "tmux set-buffer \"$/xclip -o -sel clipboard)\"; tmux paste-buffer"
-# reload the config
-bind R source-file ~/.tmux.conf \; display-message "tmux.conf reloaded!"
-# confirm before killing a window or the server
-bind-key k confirm kill-window
-# open a man page in new window
-bind / command-prompt "split-window 'exec man %%'"
-# Less ugly key for the copy mode
-bind-key Escape copy-mode -u
-# Start window numbering at 1
-set -g base-index 1
-# Like base-index, but set the starting index for pane numbers.
-set-window-option -g pane-base-index 1
-# No delay in command sequences
-set -s escape-time 0
-# Rather than constraining window size to the maximum size of any client
-# connected to the *session*, constrain window size to the maximum size of any
-# client connected to *that window*. Much more reasonable.
-setw -g aggressive-resize on
-# Activity monitoring
-set -g visual-activity on
-# I like Bash
-set-option -g default-command "/bin/bash -l"
-set-option -g default-shell /bin/bash
-# Set the number of error or information messages to save in the message
-# log for each client.  The default is 20.
-set -g message-limit 100
-# listen for activity on all windows
-set -g bell-action any
-# Set the maximum number of lines held in window history.
-# This setting applies only to new windows - existing window
-# histories are not resized and retain the limit at the point
-# they were created.
-set -g history-limit 100000
-# don't rename windows automatically
-set-option -g allow-rename off
-# Enable mouse support
-set -g mouse off
-# Set vi as the default editor
-set -g status-keys vi
-# set default terminal screen color
-set -g default-terminal "screen-256color"
-EOF
-/usr/bin/chown {{ user.name }}:{{ user.name }} /home/{{ user.name }}/.tmux.conf
-
-# Create .ms.sh in userhome for multi-ssh
-/usr/bin/cat > /home/{{ user.name }}/.ms.sh << 'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-
-if [ $# -lt 1 ]; then
-  echo "Usage: $0 host1 [host2 host3 ...]" >&2
-  exit 1
-fi
-
-first="$1"; shift
-
-# Neues Fenster mit erstem Host, Pane-ID exakt ausgeben
-pane_id="$(tmux new-window -P -F "#{pane_id}" -n "${first}" "ssh ${first}")"
-# Window-ID zu diesem Pane bestimmen
-win_id="$(tmux display-message -p -t "${pane_id}" "#{window_id}")"
-
-tmux select-window -t "${win_id}"
-
-# Weitere Hosts in neue Panes splitten
-for host in "$@"; do
-  tmux split-window -P -t "${win_id}" -F "#{pane_id}" -d "ssh ${host}" >/dev/null
-  tmux select-layout -t "${win_id}" tiled >/dev/null
-done
-
-# Synchronize panes, set layout cleanly and focus first pane
-tmux set-window-option -t "${win_id}" synchronize-panes on
-tmux select-layout -t "${win_id}" tiled >/dev/null
-
-first_pane="$(tmux list-panes -t "${win_id}" -F "#{pane_id}" | head -n1)"
-tmux select-pane -t "${first_pane}"
-EOF
-/usr/bin/chmod +x /home/{{ user.name }}/.ms.sh
-/usr/bin/chown {{ user.name }}:{{ user.name }} /home/{{ user.name }}/.ms.sh
-
-{% endif %}
 {% endfor %}
-
-
-# Create msmtp configuration for sending emails
-/usr/bin/cat > /etc/msmtprc << 'EOF'
-# Default config
-defaults
-auth            on
-tls             on
-tls_starttls    on
-tls_trust_file  /etc/pki/tls/certs/ca-bundle.crt
-set_from_header on
-syslog          on
-logfile         /var/log/msmtp.log
-aliases         /etc/aliases
-
-# Account: default relay
-account        default
-host           {{ proxmox_automatic_smtp_host }}
-port           {{ proxmox_automatic_smtp_port }}
-from           {{ proxmox_automatic_smtp_from }}
-user           {{ proxmox_automatic_smtp_user }}
-password       {{ proxmox_automatic_smtp_password }}
-
-EOF
-
-# Secure msmtp configuration
-/usr/bin/chmod 600 /etc/msmtprc
-
-# Set msmtp as mail transfer agent
-/usr/sbin/alternatives --install /usr/sbin/sendmail sendmail /usr/bin/msmtp 50
-/usr/sbin/alternatives --set sendmail /usr/bin/msmtp
-
-# Set aliases for root and proxmox_automatic_users_merged
-/usr/bin/cat > /etc/aliases << 'EOF'
-# Root alias
-root: {{ proxmox_automatic_smtp_root }}
-# Additional user aliases
-{% for user in proxmox_automatic_users_merged | default(proxmox_automatic_users) %}
-{% if user.email is defined and user.email != "" %}
-{{ user.name }}: {{ user.email }}
-{% endif %}
-{% endfor %}
-
-EOF
 
 # Configure chrony NTP servers if defined
 {% if proxmox_automatic_ntp_servers %}
@@ -478,34 +238,6 @@ EOF
 /usr/bin/echo "{{ key }} = {{ value }}" >> /etc/sysctl.d/99-proxmox-automatic-ipv6.conf
 {%   endfor %}
 {% endif%}
-
-# Create /etc/profile.d/motd.sh
-/usr/bin/cat > /etc/profile.d/motd.sh << 'EOF'
-#!/bin/sh
-
-printf "  \n"
-printf "  Welcome to $(cat /etc/redhat-release) ($(uname -m))\n"
-printf "    FQDN:   $(hostname -f)\n"
-printf "    Type:   guest\n"
-printf "    Kernel: $(uname -sr)\n"
-printf "    CPUs:   $(nproc) Core\n"
-printf "    RAM:    $(free -h | awk '/^Mem:/ {gsub(/i$/,"",$2); print $2"B"}')\n"
-printf "    IPs:    $(hostname -I | sed 's/ *$//')\n"
-printf "  \n"
-{% if proxmox_automatic_host_description is defined and proxmox_automatic_host_description | length > 0 %}
-printf "  Description: {{ proxmox_automatic_host_description }}\n"
-printf "  \n"
-{% endif %}
-{% if proxmox_automatic_host_responsible is defined and proxmox_automatic_host_responsible | length > 0 %}
-printf "  Responsible: {{ proxmox_automatic_host_responsible }}\n"
-printf "  \n"
-{% endif %}
-printf "  Template rendered: {{ template_render_time | default('Template render time not available') }}\n"
-printf "  System installed: $(date '+%Y-%m-%d %H:%M:%S %Z')\n"
-printf "  System uptime: $(uptime -p)\n"
-printf "  \n"
-EOF
-/usr/bin/chmod +x /etc/profile.d/motd.sh
 
 # Create /etc/hosts from proxmox_automatic variables
 /usr/bin/cat > /etc/hosts << 'EOF'
@@ -534,136 +266,6 @@ EOF
 {% endfor %}
 {% endif %}
 EOF
-
-# Override sshd configuration in own file under /etc/sshd/sshd_config.d/
-mkdir -p /etc/ssh/sshd_config.d/
-cat > /etc/ssh/sshd_config.d/proxmox_automatic.conf << 'EOF'
-PermitRootLogin no
-PermitEmptyPasswords no
-PasswordAuthentication no
-PubkeyAuthentication yes
-ChallengeResponseAuthentication no
-UsePAM yes
-X11Forwarding yes
-Subsystem sftp internal-sftp
-{% if proxmox_automatic_ssh_port is defined and proxmox_automatic_ssh_port != 22 %}
-Port {{ proxmox_automatic_ssh_port }}
-{% endif %}
-{% if net0_network and net0_network.ip is defined %}
-ListenAddress {{ net0_network.ip }}
-{% endif %}
-{% if proxmox_automatic_ipv6_enabled and net0_network and net0_network.ipv6 is defined %}
-ListenAddress {{ net0_network.ipv6.split('/')[0] }}
-{% endif %}
-EOF
-
-# Configure dnf automatic updates if enabled
-{% if proxmox_automatic_dnf_automatic_enabled %}
-/usr/bin/cat > /etc/dnf/automatic.conf << 'EOF'
-[commands]
-apply_updates = yes
-download_updates = yes
-random_sleep = 900
-system_name = {{ ansible_host }}
-system_package_cache = yes
-upgrade_type = default
-reboot = yes
-reboot_command = shutdown -r +5 "Rebooting after applying automatic package updates"
-
-[emitters]
-emit_via = email
-
-[command_email]
-email_from = {{ ansible_host.split('.')[0] }}@{{ proxmox_automatic_smtp_from.split('@')[1] }}
-email_to = {{ proxmox_automatic_dnf_recipients | join(',') }}
-EOF
-/usr/bin/systemctl enable --now dnf-automatic.timer
-{% endif %}
-
-# configure /etc/profile.d/ssh-agent.sh to start ssh-agent on login
-cat > /etc/profile.d/ssh-agent.sh << 'EOF'
-# Check if the shell is interactive
-if [[ $- == *i* ]]; then
-    if [ -z "$SSH_AUTH_SOCK" ]; then
-        # Check if ssh-agent is already running
-        if ! pgrep -u "$USER" ssh-agent > /dev/null; then
-            eval $(ssh-agent) > /dev/null
-        fi
-        ssh-add -l > /dev/null || alias ssh='ssh-add -l > /dev/null || ssh-add && unalias ssh; ssh'
-    fi
-fi
-EOF
-chmod +x /etc/profile.d/ssh-agent.sh
-
-# configre /etc/profile.d/git-prompt.sh
-cat > /etc/profile.d/git-prompt.sh << 'EOF'
-# ===================[ Enhanced Bash Prompt with Git Status ]===================
-
-# Colors for PS1 (Bash-escaped)
-PS1_RESET="\[\e[0m\]"
-PS1_RED="\[\e[0;31m\]"
-PS1_GREEN="\[\e[0;32m\]"
-PS1_YELLOW="\[\e[0;33m\]"
-PS1_BLUE="\[\e[0;34m\]"
-PS1_LIGHTBLUE="\[\e[1;34m\]"
-PS1_CYAN="\[\e[0;36m\]"
-
-# Git status without \[ \], but with ANSI
-parse_git_branch() {
-  git rev-parse --is-inside-work-tree &>/dev/null || return
-
-  local branch ahead behind
-  local staged=0 unstaged=0 untracked=0 conflict=0
-
-  branch=$(git symbolic-ref --short HEAD 2>/dev/null || git describe --tags --exact-match 2>/dev/null)
-
-  while IFS= read -r line; do
-    case "$line" in
-      M*|A*|D*|R*|C*) ((staged++)) ;;
-      *M) ((unstaged++)) ;;
-      \?\?*) ((untracked++)) ;;
-      UU*) ((conflict++)) ;;
-    esac
-  done < <(git status --porcelain 2>/dev/null)
-
-  if git rev-parse --abbrev-ref --symbolic-full-name @{u} &>/dev/null; then
-    ahead=$(git rev-list --count @{u}..HEAD 2>/dev/null)
-    behind=$(git rev-list --count HEAD..@{u} 2>/dev/null)
-  fi
-
-  local result=" (\033[0;33m${branch}\033[0m"
-  [[ "$ahead" -gt 0 ]]    && result+="\033[0;36m⇡${ahead}\033[0m"
-  [[ "$behind" -gt 0 ]]   && result+="\033[0;36m⇣${behind}\033[0m"
-  [[ "$staged" -gt 0 ]]   && result+="\033[0;32m+\033[0m"
-  [[ "$unstaged" -gt 0 ]] && result+="\033[0;31m~\033[0m"
-  [[ "$untracked" -gt 0 ]] && result+="\033[0;33m?\033[0m"
-  [[ "$conflict" -gt 0 ]] && result+="\033[0;31m⧉\033[0m"
-  result+=")"
-
-  printf "%b" "$result"
-}
-
-# Set prompt with parse_git_branch correctly integrated
-set_bash_prompt() {
-  local user_color exit_str=""
-  [[ $EUID -eq 0 ]] && user_color="${PS1_RED}" || user_color="${PS1_GREEN}"
-
-  # Time and date
-  local now="\$(date +'%F %T')"  # e.g. "2025-03-26 14:30:12"
-  local now_str="${PS1_YELLOW}[${now}]${PS1_RESET}"
-
-  # Exit code (only if != 0)
-  local last_exit=$?
-  if [[ $last_exit -ne 0 ]]; then
-    exit_str="${PS1_RED}✖${last_exit}${PS1_RESET} "
-  fi
-
-  PS1="${now_str} ${exit_str}${user_color}\u${PS1_RESET}@${PS1_LIGHTBLUE}\h${PS1_RESET}:${PS1_CYAN}\w${PS1_RESET}\$(parse_git_branch)\n\$ "
-}
-
-PROMPT_COMMAND=set_bash_prompt
-EOF
-
 
 # Log completion of post-installation
 echo "=== POST-INSTALLATION COMPLETED ===" >> /root/anaconda-ks-post.log
