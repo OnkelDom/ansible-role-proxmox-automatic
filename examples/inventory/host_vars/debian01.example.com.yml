@@ -1,0 +1,15 @@
+---
+proxmox_automatic_install_source: "online"
+proxmox_automatic_source_iso_path: "/srv/iso/debian-13.3.0-amd64-netinst.iso"
+proxmox_automatic_networks:
+  - name: net0
+    bridge: vmbr1
+    vlanid: 3
+    ip: "192.0.2.15"
+    netmask: "255.255.255.0"
+    gateway: "192.0.2.1"
+  - name: net1
+    bridge: vmbr1
+    vlanid: 30
+    ip: "198.51.100.15"
+    netmask: "255.255.255.0"

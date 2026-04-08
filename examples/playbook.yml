@@ -1,0 +1,6 @@
+---
+- name: Provision example VMs on Proxmox
+  hosts: proxmox_vms
+  gather_facts: false
+  roles:
+    - role: proxmox_automatic
