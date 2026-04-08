@@ -30,6 +30,7 @@
       - xorriso
       - isolinux
       - syslinux
+      - libarchive-tools
     state: present
   become: true
   when: ansible_os_family == "Debian"
@@ -111,6 +112,7 @@
       - xorriso (ISO creation tool)
       - isolinux (provides /usr/share/syslinux/isohdpfx.bin)
       - syslinux (additional syslinux tools)
+      - libarchive-tools (bsdtar for ISO inspection/remaster support)
       {% elif ansible_os_family == "Darwin" %}
       - xorriso (ISO creation tool)
       - syslinux (bootloader tools)

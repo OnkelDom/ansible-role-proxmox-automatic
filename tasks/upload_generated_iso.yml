@@ -1,0 +1,14 @@
+---
+- name: "Upload generated ISO to Proxmox"
+  proxmox_automatic_upload_iso:
+    api_host: "{{ proxmox_automatic_api_host }}"
+    api_user: "{{ proxmox_automatic_api_user }}"
+    api_password: "{{ proxmox_automatic_api_password }}"
+    api_token_id: "{{ proxmox_automatic_api_token_id | default(omit) }}"
+    api_token_secret: "{{ proxmox_automatic_api_token_secret | default(omit) }}"
+    validate_certs: "{{ proxmox_automatic_api_validate_certs | default(false) }}"
+    storage: "{{ proxmox_automatic_pve_iso_storage }}"
+    node: "{{ proxmox_automatic_hypervisor.split('.')[0] }}"
+    iso_path: "{{ proxmox_automatic_upload_iso_path }}"
+    iso_name: "{{ proxmox_automatic_upload_iso_name }}"
+  delegate_to: localhost

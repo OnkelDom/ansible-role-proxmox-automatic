@@ -1,0 +1,212 @@
+---
+- name: "Create Debian preseed dependencies"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ proxmox_automatic_files_dir }}"
+    - "{{ proxmox_automatic_iso_dir }}"
+    - "{{ proxmox_automatic_iso_build_dir }}"
+  delegate_to: localhost
+
+- name: "Set Debian ISO names"
+  ansible.builtin.set_fact:
+    proxmox_automatic_backend_source_iso_path: >-
+      {{
+        proxmox_automatic_source_iso_path
+        if proxmox_automatic_source_iso_path | length > 0
+        else proxmox_automatic_iso_dir ~ '/' ~ proxmox_automatic_source_iso_name ~ '.iso'
+      }}
+    proxmox_automatic_backend_generated_iso_name: >-
+      {{
+        proxmox_automatic_generated_iso_name
+        if proxmox_automatic_generated_iso_name | length > 0
+        else 'preseed-' ~ ansible_host
+      }}
+
+- name: "Ensure Debian source ISO is available on controller"
+  ansible.builtin.stat:
+    path: "{{ proxmox_automatic_backend_source_iso_path }}"
+  register: proxmox_automatic_source_iso_stat
+  delegate_to: localhost
+
+- name: "Fail if Debian source ISO is missing"
+  ansible.builtin.assert:
+    that:
+      - proxmox_automatic_source_iso_stat.stat.exists
+      - proxmox_automatic_source_iso_stat.stat.isreg
+    fail_msg: >-
+      Debian source ISO not found at '{{ proxmox_automatic_backend_source_iso_path }}'.
+      Provide proxmox_automatic_source_iso_path or place the ISO on the controller.
+  delegate_to: localhost
+
+- name: "Create Debian preseed file"
+  ansible.builtin.template:
+    src: >-
+      {{
+        proxmox_automatic_preseed_template
+        if proxmox_automatic_preseed_template.startswith('/')
+        else (role_path | default(playbook_dir ~ '/..')) ~ '/templates/' ~ proxmox_automatic_preseed_template
+      }}
+    dest: "{{ proxmox_automatic_files_dir }}/preseed-{{ ansible_host }}.cfg"
+    mode: "0644"
+    force: true
+  delegate_to: localhost
+  vars:
+    template_render_time: "{{ now().strftime('%Y-%m-%d %H:%M:%S %Z') }}"
+
+- name: "Read Debian source ISO volume label"
+  ansible.builtin.shell: |
+    set -euo pipefail
+    xorriso -indev {{ proxmox_automatic_backend_source_iso_path | quote }} -pvd_info \
+      | sed -n "s/^Volume Id    : //p" \
+      | head -n 1
+  args:
+    executable: /bin/bash
+  register: proxmox_automatic_source_iso_label
+  delegate_to: localhost
+  changed_when: false
+
+- name: "Recreate Debian ISO build workspace"
+  ansible.builtin.file:
+    path: "{{ proxmox_automatic_iso_build_dir }}/{{ proxmox_automatic_backend_generated_iso_name }}"
+    state: absent
+  delegate_to: localhost
+
+- name: "Create Debian ISO build root"
+  ansible.builtin.file:
+    path: "{{ proxmox_automatic_iso_build_dir }}/{{ proxmox_automatic_backend_generated_iso_name }}/root"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+
+- name: "Extract Debian source ISO"
+  ansible.builtin.command: >
+    xorriso -osirrox on
+    -indev {{ proxmox_automatic_backend_source_iso_path }}
+    -extract / {{ proxmox_automatic_iso_build_dir }}/{{ proxmox_automatic_backend_generated_iso_name }}/root
+  delegate_to: localhost
+  changed_when: true
+
+- name: "Make extracted Debian ISO tree writable"
+  ansible.builtin.command: >
+    chmod -R u+w {{ proxmox_automatic_iso_build_dir }}/{{ proxmox_automatic_backend_generated_iso_name }}/root
+  delegate_to: localhost
+  changed_when: true
+
+- name: "Copy Debian preseed into ISO root"
+  ansible.builtin.copy:
+    src: "{{ proxmox_automatic_files_dir }}/preseed-{{ ansible_host }}.cfg"
+    dest: "{{ proxmox_automatic_iso_build_dir }}/{{ proxmox_automatic_backend_generated_iso_name }}/root/preseed.cfg"
+    mode: "0644"
+  delegate_to: localhost
+
+- name: "Inject preseed boot parameters into Debian ISO"
+  ansible.builtin.shell: |
+    set -euo pipefail
+    root="{{ proxmox_automatic_iso_build_dir }}/{{ proxmox_automatic_backend_generated_iso_name }}/root"
+    append_args="auto=true priority=critical firmware=never preseed/file=/cdrom/preseed.cfg debian-installer/locale={{ proxmox_automatic_language }} keyboard-configuration/xkb-keymap={{ proxmox_automatic_keyboard_layout }}"
+
+    if [ -f "$root/isolinux/txt.cfg" ]; then
+      if ! grep -q 'preseed/file=/cdrom/preseed.cfg' "$root/isolinux/txt.cfg"; then
+        APPEND_ARGS="$append_args" perl -0pi -e 's{(^\s*append\s+.*?)(\s+---(?:[^\n]*)?)$}{$1 . q{ } . $ENV{APPEND_ARGS} . $2}mge' "$root/isolinux/txt.cfg"
+      fi
+      if ! grep -q '^label auto$' "$root/isolinux/txt.cfg"; then
+        printf '\nlabel auto\n  menu label ^Automated install\n  menu default\n  kernel /install.amd/vmlinuz\n  append vga=788 initrd=/install.amd/initrd.gz %s ---\n' "$append_args" >> "$root/isolinux/txt.cfg"
+      fi
+    fi
+
+    if [ -f "$root/isolinux/isolinux.cfg" ]; then
+      perl -0pi -e 's/^timeout\s+.*/timeout 10/m' "$root/isolinux/isolinux.cfg"
+      if ! grep -q '^timeout ' "$root/isolinux/isolinux.cfg"; then
+        printf '\ntimeout 10\n' >> "$root/isolinux/isolinux.cfg"
+      fi
+      if grep -q '^ontimeout ' "$root/isolinux/isolinux.cfg"; then
+        perl -0pi -e 's/^ontimeout\s+.*/ontimeout auto/m' "$root/isolinux/isolinux.cfg"
+      else
+        printf 'ontimeout auto\n' >> "$root/isolinux/isolinux.cfg"
+      fi
+    fi
+
+    for grub_cfg in "$root/boot/grub/grub.cfg" "$root/boot/grub/loopback.cfg" "$root/grub/grub.cfg"; do
+      if [ -f "$grub_cfg" ]; then
+        if ! grep -q 'preseed/file=/cdrom/preseed.cfg' "$grub_cfg"; then
+          APPEND_ARGS="$append_args" perl -0pi -e 's{(^\s*linux\s+\S+.*?)(\s+---(?:[^\n]*)?)$}{$1 . q{ } . $ENV{APPEND_ARGS} . $2}mge' "$grub_cfg"
+        fi
+        if grep -q '^set timeout=' "$grub_cfg"; then
+          perl -0pi -e 's/^set timeout=.*/set timeout=1/m' "$grub_cfg"
+        else
+          tmp_grub_cfg="$(mktemp)"
+          printf 'set timeout=1\nset default=1\n' > "$tmp_grub_cfg"
+          cat "$grub_cfg" >> "$tmp_grub_cfg"
+          mv "$tmp_grub_cfg" "$grub_cfg"
+        fi
+        if grep -q '^set default=' "$grub_cfg"; then
+          perl -0pi -e 's/^set default=.*/set default=1/m' "$grub_cfg"
+        else
+          tmp_grub_cfg="$(mktemp)"
+          printf 'set default=1\n' > "$tmp_grub_cfg"
+          cat "$grub_cfg" >> "$tmp_grub_cfg"
+          mv "$tmp_grub_cfg" "$grub_cfg"
+        fi
+      fi
+    done
+  args:
+    executable: /bin/bash
+  delegate_to: localhost
+  changed_when: true
+
+- name: "Build remastered Debian ISO"
+  ansible.builtin.shell: |
+    set -euo pipefail
+    root="{{ proxmox_automatic_iso_build_dir }}/{{ proxmox_automatic_backend_generated_iso_name }}/root"
+    output="{{ proxmox_automatic_iso_dir }}/{{ proxmox_automatic_backend_generated_iso_name }}.iso"
+    mbr=""
+    xorriso_args=(
+      -as mkisofs
+      -r -J -joliet-long -l
+      -V "{{ proxmox_automatic_source_iso_label.stdout | trim }}"
+      -o "$output"
+    )
+
+    for candidate in /usr/share/syslinux/isohdpfx.bin /usr/lib/syslinux/isohdpfx.bin /usr/lib/ISOLINUX/isohdpfx.bin; do
+      if [ -f "$candidate" ]; then
+        mbr="$candidate"
+        break
+      fi
+    done
+
+    if [ -n "$mbr" ]; then
+      xorriso_args+=(-isohybrid-mbr "$mbr")
+    else
+      echo "No isohdpfx.bin found; building Debian ISO without hybrid MBR support" >&2
+    fi
+
+    xorriso "${xorriso_args[@]}" \
+      -c isolinux/boot.cat \
+      -b isolinux/isolinux.bin \
+      -no-emul-boot \
+      -boot-load-size 4 \
+      -boot-info-table \
+      -eltorito-alt-boot \
+      -e boot/grub/efi.img \
+      -no-emul-boot \
+      "$root"
+  args:
+    executable: /bin/bash
+  delegate_to: localhost
+  changed_when: true
+
+- name: "Upload remastered Debian ISO to Proxmox"
+  ansible.builtin.include_tasks: upload_generated_iso.yml
+  vars:
+    proxmox_automatic_upload_iso_path: >-
+      {{ proxmox_automatic_iso_dir }}/{{ proxmox_automatic_backend_generated_iso_name }}.iso
+    proxmox_automatic_upload_iso_name: "{{ proxmox_automatic_backend_generated_iso_name }}.iso"
+  when: not (proxmox_automatic_skip_iso_upload | bool)
+
+- name: "Set Debian VM media layout"
+  ansible.builtin.set_fact:
+    proxmox_automatic_primary_cdrom_iso: "{{ proxmox_automatic_backend_generated_iso_name }}"
+    proxmox_automatic_secondary_cdrom_iso: ""

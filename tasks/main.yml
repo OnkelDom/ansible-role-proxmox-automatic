@@ -31,6 +31,22 @@
     - proxmox_automatic_create_kickstart
     - proxmox_automatic_create_vm
 
+- name: "Validate installer backend"
+  ansible.builtin.assert:
+    that:
+      - proxmox_automatic_installer_backend in ['rocky_kickstart', 'debian13_preseed']
+      - proxmox_automatic_install_source in ['online', 'cdrom']
+    fail_msg: >-
+      Unsupported installer configuration.
+      proxmox_automatic_installer_backend={{ proxmox_automatic_installer_backend }}
+      proxmox_automatic_install_source={{ proxmox_automatic_install_source }}
+      Supported backends: rocky_kickstart, debian13_preseed.
+      Supported install sources: online, cdrom.
+  tags:
+    - proxmox_automatic
+    - proxmox_automatic_create_kickstart
+    - proxmox_automatic_create_vm
+
 - name: "Process defaults storage config"
   ansible.builtin.set_fact:
     storage_dict: "{{ storage_dict | combine({item.name: item}) }}"
@@ -187,8 +203,33 @@
     - proxmox_automatic_create_kickstart
     - proxmox_automatic_create_vm
 
-- name: "Create and upload Kickstart ISO"
+- name: "Set effective package list"
+  ansible.builtin.set_fact:
+    proxmox_automatic_packages_effective: >-
+      {{
+        proxmox_automatic_packages_default
+        if proxmox_automatic_packages_default | length > 0
+        else (
+          proxmox_automatic_packages_default_rocky_kickstart
+          if proxmox_automatic_installer_backend == 'rocky_kickstart'
+          else proxmox_automatic_debian_packages_default
+        )
+      }}
+  tags:
+    - proxmox_automatic
+    - proxmox_automatic_create_kickstart
+    - proxmox_automatic_create_vm
+
+- name: "Create and upload Rocky Kickstart ISO"
   ansible.builtin.import_tasks: create_kickstart.yml
+  when: proxmox_automatic_installer_backend == 'rocky_kickstart'
+  tags:
+    - proxmox_automatic_create_kickstart
+    - proxmox_automatic
+
+- name: "Create and upload Debian Preseed ISO"
+  ansible.builtin.import_tasks: create_preseed.yml
+  when: proxmox_automatic_installer_backend == 'debian13_preseed'
   tags:
     - proxmox_automatic_create_kickstart
     - proxmox_automatic
@@ -199,7 +240,7 @@
     - proxmox_automatic_pools
     - proxmox_automatic
 
-- name: "Ensure HA groups exist"
+- name: "Prepare shared HA rule context"
   ansible.builtin.import_tasks: create_ha_groups.yml
   tags:
     - proxmox_automatic_ha

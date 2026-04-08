@@ -1,0 +1,302 @@
+#### Debian 13 ({{ proxmox_automatic_debian_suite | capitalize }}) preseed
+#### Generated: {{ template_render_time }}
+
+{% set named_primary_networks = proxmox_automatic_networks | selectattr('name', 'equalto', 'net0') | list %}
+{% set primary_network = named_primary_networks[0] if named_primary_networks | length > 0 else (proxmox_automatic_networks[0] if proxmox_automatic_networks | length > 0 else {}) %}
+{% set bootable_storage = proxmox_automatic_storage_config | selectattr('bootloader', 'defined') | selectattr('bootloader') | list %}
+{% set primary_storage = bootable_storage[0] if bootable_storage | length > 0 else (proxmox_automatic_storage_config[0] if proxmox_automatic_storage_config | length > 0 else {}) %}
+{% set merged_users = proxmox_automatic_users_merged | default(proxmox_automatic_users) %}
+{% set primary_user = merged_users[0] if merged_users | length > 0 else {} %}
+{% set extra_users = merged_users[1:] if merged_users | length > 1 else [] %}
+{% set interface_index = proxmox_automatic_debian_interface_index_start | int %}
+{% set interface_name = proxmox_automatic_debian_interface_prefix ~ interface_index %}
+{% set package_list = (proxmox_automatic_packages_effective + proxmox_automatic_packages_additional) | unique %}
+{% if proxmox_automatic_install_source == 'cdrom' %}
+{%   set package_list = package_list | reject('equalto', 'qemu-guest-agent') | list %}
+{% endif %}
+{% set vg = (primary_storage.vg | first) if primary_storage is mapping and primary_storage.vg is defined and primary_storage.vg | length > 0 else {} %}
+{% set root_lv = (vg.lv | selectattr('mount', 'defined') | selectattr('mount', 'equalto', '/') | first) if vg is mapping and vg.lv is defined else {} %}
+{% set disk_size_recipe_mb = ((primary_storage.size | default(0) | int) * 1024 * 1024 * 1024) // 1000000 %}
+{% set non_lvm_partition_recipe_mb = namespace(total=0) %}
+{% set pv_partition_recipe_mb = namespace(total=0) %}
+{% if primary_storage is mapping and primary_storage.partitions is defined %}
+{%   for partition in primary_storage.partitions %}
+{%     set partition_recipe_mb = (((partition.size | int) * 1024 * 1024) + 999999) // 1000000 %}
+{%     if partition.type | default('') == 'pv' %}
+{%       set pv_partition_recipe_mb.total = pv_partition_recipe_mb.total + partition_recipe_mb %}
+{%     else %}
+{%       set non_lvm_partition_recipe_mb.total = non_lvm_partition_recipe_mb.total + partition_recipe_mb %}
+{%     endif %}
+{%   endfor %}
+{% endif %}
+{% set non_root_lv_recipe_mb = namespace(total=0) %}
+{% if vg is mapping and vg.lv is defined %}
+{%   for lv in vg.lv %}
+{%     if (lv.mount | default('')) != '/' %}
+{%       set non_root_lv_recipe_mb.total = non_root_lv_recipe_mb.total + ((((lv.size | int) * 1024 * 1024) + 999999) // 1000000) %}
+{%     endif %}
+{%   endfor %}
+{% endif %}
+{% set root_lv_size_mb = ([disk_size_recipe_mb - non_lvm_partition_recipe_mb.total - pv_partition_recipe_mb.total - non_root_lv_recipe_mb.total, 0] | max) %}
+
+###############################################################################
+# LOCALE & KEYBOARD
+###############################################################################
+d-i debian-installer/locale string {{ proxmox_automatic_language }}
+d-i debian-installer/language string {{ proxmox_automatic_language.split('_')[0] }}
+d-i debian-installer/country string DE
+d-i keyboard-configuration/xkb-keymap select {{ proxmox_automatic_keyboard_layout }}
+
+###############################################################################
+# TIME / CLOCK
+###############################################################################
+d-i time/zone string {{ proxmox_automatic_timezone }}
+d-i clock-setup/utc boolean true
+d-i clock-setup/ntp boolean true
+{% if proxmox_automatic_ntp_servers | length > 0 %}
+d-i clock-setup/ntp-server string {{ proxmox_automatic_ntp_servers[0] }}
+{% endif %}
+
+###############################################################################
+# NETWORK
+###############################################################################
+d-i netcfg/choose_interface select {{ interface_name }}
+{% if proxmox_automatic_dhcp_enabled %}
+d-i netcfg/disable_autoconfig boolean false
+d-i netcfg/get_hostname string {{ ansible_host.split('.')[0] }}
+d-i netcfg/get_domain string {{ ansible_host.split('.', 1)[1] if '.' in ansible_host else '' }}
+{% elif primary_network %}
+d-i netcfg/disable_autoconfig boolean true
+d-i netcfg/get_ipaddress string {{ primary_network.ip }}
+d-i netcfg/get_netmask string {{ primary_network.netmask }}
+{% if primary_network.gateway is defined %}
+d-i netcfg/get_gateway string {{ primary_network.gateway }}
+{% endif %}
+d-i netcfg/get_nameservers string {{ proxmox_automatic_dns_servers | join(' ') }}
+d-i netcfg/confirm_static boolean true
+d-i netcfg/get_hostname string {{ ansible_host.split('.')[0] }}
+d-i netcfg/get_domain string {{ ansible_host.split('.', 1)[1] if '.' in ansible_host else '' }}
+d-i netcfg/hostname string {{ ansible_host }}
+{% endif %}
+
+###############################################################################
+# MIRROR / APT
+###############################################################################
+d-i base-installer/install-recommends boolean false
+d-i hw-detect/firmware-lookup string never
+d-i hw-detect/load_firmware boolean false
+{% if proxmox_automatic_install_source == 'cdrom' %}
+d-i apt-setup/use_mirror boolean false
+d-i apt-setup/disable-cdrom-entries boolean false
+d-i apt-setup/cdrom/set-first boolean false
+d-i apt-setup/cdrom/set-next boolean false
+d-i apt-setup/cdrom/set-failed boolean false
+d-i apt-setup/services-select multiselect
+{% else %}
+d-i apt-setup/use_mirror boolean true
+d-i apt-setup/disable-cdrom-entries boolean true
+d-i apt-setup/contrib boolean false
+d-i apt-setup/non-free boolean false
+d-i apt-setup/non-free-firmware boolean false
+d-i mirror/country string manual
+d-i mirror/http/hostname string {{ proxmox_automatic_debian_mirror }}
+d-i mirror/http/directory string {{ proxmox_automatic_debian_mirror_directory }}
+d-i mirror/suite string {{ proxmox_automatic_debian_suite }}
+d-i mirror/udeb/suite string {{ proxmox_automatic_debian_suite }}
+d-i mirror/http/proxy string
+d-i apt-setup/services-select multiselect security, updates
+d-i apt-setup/security_host string {{ proxmox_automatic_debian_security_host }}
+{% endif %}
+
+###############################################################################
+# USERS
+###############################################################################
+d-i passwd/root-login boolean {{ 'true' if proxmox_automatic_debian_root_login else 'false' }}
+{% if primary_user %}
+d-i passwd/make-user boolean true
+d-i passwd/user-fullname string {{ primary_user.fullname | default(primary_user.gecos | default(primary_user.name)) }}
+d-i passwd/username string {{ primary_user.name }}
+{% if primary_user.password is defined and primary_user.password != '' %}
+{% if primary_user.password_encrypted | default(false) %}
+d-i passwd/user-password-crypted password {{ primary_user.password }}
+{% else %}
+d-i passwd/user-password password {{ primary_user.password }}
+d-i passwd/user-password-again password {{ primary_user.password }}
+{% endif %}
+{% else %}
+d-i passwd/user-password-crypted password !
+{% endif %}
+{% if primary_user.uid is defined %}
+d-i passwd/user-uid string {{ primary_user.uid }}
+{% endif %}
+{% if primary_user.groups is defined and primary_user.groups | length > 0 %}
+d-i passwd/user-default-groups string {{ primary_user.groups | join(',') }}
+{% endif %}
+{% else %}
+d-i passwd/make-user boolean false
+{% endif %}
+
+###############################################################################
+# DISK / LVM
+###############################################################################
+{% if primary_storage %}
+d-i partman-auto/disk string /dev/{{ primary_storage.disk }}
+d-i partman-auto/method string lvm
+d-i partman-lvm/device_remove_lvm boolean true
+d-i partman-md/device_remove_md boolean true
+d-i partman-lvm/confirm boolean true
+d-i partman-lvm/confirm_nooverwrite boolean true
+{% if proxmox_automatic_debian_partition_recipe_override | length > 0 %}
+d-i partman-auto/expert_recipe string {{ proxmox_automatic_debian_partition_recipe_override }}
+{% else %}
+d-i partman-auto/expert_recipe string                         \
+      proxmox-auto ::                                        \
+{%   for partition in primary_storage.partitions | default([]) %}
+{%     set partition_recipe_mb = (((partition.size | int) * 1024 * 1024) + 999999) // 1000000 %}
+{%     if partition.fstype | default('') == 'efi' %}
+              {{ partition_recipe_mb }} {{ partition_recipe_mb }} {{ partition_recipe_mb }} fat32 \
+                      $primary{ } method{ efi } format{ } mountpoint{ {{ partition.mount }} } \
+              .                                               \
+{%     elif partition.type | default('') == 'pv' %}
+              {{ partition_recipe_mb }} 100% 100% lvm              \
+                      $primary{ } method{ lvm } device{ /dev/{{ primary_storage.disk }} } vg_name{ {{ vg.name | default('system') }} } \
+              .                                               \
+{%     else %}
+              {{ partition_recipe_mb }} {{ partition_recipe_mb }} {{ partition_recipe_mb }} {{ partition.fstype | default('ext4') }} \
+                      $primary{ } method{ format } format{ } use_filesystem{ } filesystem{ {{ partition.fstype | default('ext4') }} } mountpoint{ {{ partition.mount }} } \
+              .                                               \
+{%     endif %}
+{%   endfor %}
+{%   for lv in vg.lv | default([]) %}
+{%     set lv_recipe_size = root_lv_size_mb if (lv.grow | default(false)) and (lv.mount | default('') == '/') else ((((lv.size | int) * 1024 * 1024) + 999999) // 1000000) %}
+{%     set lv_recipe_min_size = lv_recipe_size %}
+{%     set lv_recipe_priority_size = lv_recipe_size %}
+{%     set lv_recipe_max_size = lv_recipe_size %}
+              {{ lv_recipe_min_size }} {{ lv_recipe_priority_size }} {{ lv_recipe_max_size }} {{ lv.fstype | default('ext4') if lv.mount != 'swap' else 'linux-swap' }} \
+                      $lvmok{ } in_vg{ {{ vg.name | default('system') }} } lv_name{ {{ lv.name }} } {% if lv.mount == 'swap' %}method{ swap } format{ }{% else %}method{ format } format{ } use_filesystem{ } filesystem{ {{ lv.fstype | default('ext4') }} } mountpoint{ {{ lv.mount }} }{% endif %} \
+              .                                               \
+{%   endfor %}
+{% endif %}
+d-i partman-partitioning/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+{% endif %}
+
+###############################################################################
+# BOOTLOADER
+###############################################################################
+{% if primary_storage %}
+d-i grub-installer/only_debian boolean true
+d-i grub-installer/bootdev string /dev/{{ primary_storage.disk }}
+d-i grub-installer/with_other_os boolean false
+d-i grub-installer/target string x86_64-efi
+{% endif %}
+
+###############################################################################
+# PACKAGES / TASKS
+###############################################################################
+{% if proxmox_automatic_debian_tasksel | length > 0 %}
+tasksel tasksel/first multiselect {{ proxmox_automatic_debian_tasksel | join(', ') }}
+{% else %}
+d-i pkgsel/run_tasksel boolean false
+{% endif %}
+{% if package_list | length > 0 %}
+d-i pkgsel/include string {{ package_list | join(' ') }}
+{% endif %}
+d-i pkgsel/install-recommends boolean false
+d-i pkgsel/install-language-support boolean false
+d-i pkgsel/update-policy select none
+d-i pkgsel/upgrade select none
+popularity-contest popularity-contest/participate boolean false
+
+###############################################################################
+# FINISHING
+###############################################################################
+d-i cdrom-detect/eject boolean true
+d-i finish-install/reboot_in_progress note
+d-i finish-install/reboot boolean true
+d-i debian-installer/exit/reboot boolean true
+d-i debian-installer/exit/poweroff boolean false
+
+###############################################################################
+# LATE COMMANDS
+###############################################################################
+d-i preseed/late_command string \
+{% if primary_user and primary_user.ssh_key is defined and primary_user.ssh_key != '' %}
+    in-target mkdir -p /home/{{ primary_user.name }}/.ssh; \
+    in-target chmod 700 /home/{{ primary_user.name }}/.ssh; \
+    echo "{{ primary_user.ssh_key }}" > /target/home/{{ primary_user.name }}/.ssh/authorized_keys; \
+{%   for sshkey in primary_user.additional_ssh_keys | default([]) %}
+    echo "{{ sshkey }}" >> /target/home/{{ primary_user.name }}/.ssh/authorized_keys; \
+{%   endfor %}
+    in-target chmod 600 /home/{{ primary_user.name }}/.ssh/authorized_keys; \
+    in-target chown -R {{ primary_user.name }}:{{ primary_user.name }} /home/{{ primary_user.name }}/.ssh; \
+{% endif %}
+{% for user in extra_users %}
+    in-target /usr/sbin/useradd -m{% if user.shell is defined %} -s {{ user.shell }}{% endif %}{% if user.uid is defined %} -u {{ user.uid }}{% endif %} {% if user.groups is defined and user.groups | length > 0 %}-G {{ user.groups | join(',') }} {% endif %}{{ user.name }} || true; \
+{%   if user.password is defined and user.password != '' %}
+{%     if user.password_encrypted | default(false) %}
+    in-target /bin/sh -c 'echo "{{ user.name }}:{{ user.password }}" | chpasswd -e'; \
+{%     else %}
+    in-target /bin/sh -c 'echo "{{ user.name }}:{{ user.password }}" | chpasswd'; \
+{%     endif %}
+{%   endif %}
+{%   if user.ssh_key is defined and user.ssh_key != '' %}
+    in-target mkdir -p /home/{{ user.name }}/.ssh; \
+    in-target chmod 700 /home/{{ user.name }}/.ssh; \
+    echo "{{ user.ssh_key }}" > /target/home/{{ user.name }}/.ssh/authorized_keys; \
+{%     for sshkey in user.additional_ssh_keys | default([]) %}
+    echo "{{ sshkey }}" >> /target/home/{{ user.name }}/.ssh/authorized_keys; \
+{%     endfor %}
+    in-target chmod 600 /home/{{ user.name }}/.ssh/authorized_keys; \
+    in-target chown -R {{ user.name }}:{{ user.name }} /home/{{ user.name }}/.ssh; \
+{%   endif %}
+{%   if user.sudo_commands is defined %}
+    echo "{{ user.name }} ALL=(ALL) {% if user.sudo_nopasswd | default(true) %}NOPASSWD: {% endif %}{{ user.sudo_commands }}" > /target/etc/sudoers.d/user_{{ user.name }}; \
+    in-target chmod 440 /etc/sudoers.d/user_{{ user.name }}; \
+{%   endif %}
+{% endfor %}
+{% if primary_user and primary_user.sudo_commands is defined %}
+    echo "{{ primary_user.name }} ALL=(ALL) {% if primary_user.sudo_nopasswd | default(true) %}NOPASSWD: {% endif %}{{ primary_user.sudo_commands }}" > /target/etc/sudoers.d/user_{{ primary_user.name }}; \
+    in-target chmod 440 /etc/sudoers.d/user_{{ primary_user.name }}; \
+{% endif %}
+{% for key, value in proxmox_automatic_sysctl_settings.items() %}
+    echo "{{ key }}={{ value }}" >> /target/etc/sysctl.d/99-proxmox-automatic.conf; \
+{% endfor %}
+{% if proxmox_automatic_ipv6_enabled %}
+{%   for key, value in proxmox_automatic_ipv6_sysctl_settings.items() %}
+    echo "{{ key }}={{ value }}" >> /target/etc/sysctl.d/99-proxmox-automatic.conf; \
+{%   endfor %}
+{% endif %}
+{% if not proxmox_automatic_dhcp_enabled and proxmox_automatic_networks | length > 0 %}
+    printf 'source /etc/network/interfaces.d/*.cfg\nauto lo\niface lo inet loopback\n' > /target/etc/network/interfaces; \
+{%   for network in proxmox_automatic_networks %}
+{%     set device = proxmox_automatic_debian_interface_prefix ~ (proxmox_automatic_debian_interface_index_start + (network.name | replace('net', '') | int)) %}
+    printf '\nauto {{ device }}\niface {{ device }} inet static\n    address {{ network.ip }}\n    netmask {{ network.netmask }}\n{% if network.gateway is defined %}    gateway {{ network.gateway }}\n{% endif %}    dns-nameservers {{ proxmox_automatic_dns_servers | join(' ') }}\n' >> /target/etc/network/interfaces; \
+{%   endfor %}
+{% endif %}
+    in-target hostnamectl set-hostname {{ ansible_host }}; \
+    printf '127.0.0.1 localhost\n::1 localhost\n' > /target/etc/hosts; \
+{% if primary_network %}
+    echo '{{ primary_network.ip }} {{ ansible_host }} {{ ansible_host.split(".")[0] }}' >> /target/etc/hosts; \
+{% endif %}
+{% for host in proxmox_automatic_additional_hosts %}
+    echo '{{ host.ip }} {{ host.hostname }}' >> /target/etc/hosts; \
+{% endfor %}
+    in-target /bin/sh -c "grep -q '^GRUB_TERMINAL=console' /etc/default/grub || echo 'GRUB_TERMINAL=console' >> /etc/default/grub"; \
+    in-target /bin/sh -c "grep -q '^GRUB_GFXPAYLOAD_LINUX=text' /etc/default/grub || echo 'GRUB_GFXPAYLOAD_LINUX=text' >> /etc/default/grub"; \
+{% if proxmox_automatic_debian_purge_microcode | bool %}
+    in-target /bin/sh -c 'DEBIAN_FRONTEND=noninteractive apt-get -y purge intel-microcode iucode-tool amd64-microcode || true'; \
+    in-target update-initramfs -u -k all; \
+{% endif %}
+    in-target update-grub; \
+{% if proxmox_automatic_debian_disable_network_manager %}
+    in-target systemctl disable NetworkManager || true; \
+{% endif %}
+    in-target systemctl enable ssh || true; \
+    in-target systemctl enable qemu-guest-agent || true; \
+{% for command in proxmox_automatic_debian_late_command_extra %}
+    {{ command }}; \
+{% endfor %}
+    true

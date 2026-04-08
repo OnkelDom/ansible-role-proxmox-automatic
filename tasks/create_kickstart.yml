@@ -12,7 +12,12 @@
 
 - name: "Create kickstart file"
   ansible.builtin.template:
-    src: "kickstart.cfg.j2"
+    src: >-
+      {{
+        proxmox_automatic_kickstart_template
+        if proxmox_automatic_kickstart_template.startswith('/')
+        else (role_path | default(playbook_dir ~ '/..')) ~ '/templates/' ~ proxmox_automatic_kickstart_template
+      }}
     dest: "{{ proxmox_automatic_files_dir }}/ks-{{ ansible_host }}.cfg"
     mode: "0644"
     force: true
@@ -20,26 +25,35 @@
   vars:
     template_render_time: "{{ now().strftime('%Y-%m-%d %H:%M:%S %Z') }}"
 
+- name: "Set Rocky ISO names"
+  ansible.builtin.set_fact:
+    proxmox_automatic_backend_source_iso_name: "{{ proxmox_automatic_source_iso_name }}"
+    proxmox_automatic_backend_generated_iso_name: >-
+      {{
+        proxmox_automatic_generated_iso_name
+        if proxmox_automatic_generated_iso_name | length > 0
+        else 'ks-' ~ ansible_host
+      }}
+
 - name: "Create ISO file"
   ansible.builtin.command: >
     xorriso -as mkisofs
-    -o {{ proxmox_automatic_iso_dir }}/ks-{{ ansible_host }}.iso
-    -V KS_{{ ansible_host }}
+    -o {{ proxmox_automatic_iso_dir }}/{{ proxmox_automatic_backend_generated_iso_name }}.iso
+    -V {{ proxmox_automatic_backend_generated_iso_name | upper | regex_replace('[^A-Z0-9_]', '_') }}
     -J -R
     -graft-points ks.cfg={{ proxmox_automatic_files_dir }}/ks-{{ ansible_host }}.cfg
   delegate_to: localhost
   changed_when: true
 
-- name: "Upload ISO to Proxmox"
-  proxmox_automatic_upload_iso:
-    api_host: "{{ proxmox_automatic_api_host }}"
-    api_user: "{{ proxmox_automatic_api_user }}"
-    api_password: "{{ proxmox_automatic_api_password }}"
-    api_token_id: "{{ proxmox_automatic_api_token_id | default(omit) }}"
-    api_token_secret: "{{ proxmox_automatic_api_token_secret | default(omit) }}"
-    validate_certs: "{{ proxmox_automatic_api_validate_certs | default(false) }}"
-    storage: "{{ proxmox_automatic_pve_iso_storage }}"
-    node: "{{ proxmox_automatic_hypervisor.split('.')[0] }}"
-    iso_path: "{{ proxmox_automatic_iso_dir }}/ks-{{ ansible_host }}.iso"
-    iso_name: "ks-{{ ansible_host }}.iso"
-  delegate_to: localhost
+- name: "Upload Rocky ISO to Proxmox"
+  ansible.builtin.include_tasks: upload_generated_iso.yml
+  vars:
+    proxmox_automatic_upload_iso_path: >-
+      {{ proxmox_automatic_iso_dir }}/{{ proxmox_automatic_backend_generated_iso_name }}.iso
+    proxmox_automatic_upload_iso_name: "{{ proxmox_automatic_backend_generated_iso_name }}.iso"
+  when: not (proxmox_automatic_skip_iso_upload | bool)
+
+- name: "Set Rocky VM media layout"
+  ansible.builtin.set_fact:
+    proxmox_automatic_primary_cdrom_iso: "{{ proxmox_automatic_backend_source_iso_name }}"
+    proxmox_automatic_secondary_cdrom_iso: "{{ proxmox_automatic_backend_generated_iso_name }}"

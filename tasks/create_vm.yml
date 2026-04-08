@@ -48,6 +48,27 @@
   loop_control:
     label: "{{ item.name }}"
 
+- name: "Build installer media configuration"
+  ansible.builtin.set_fact:
+    vm_ide_config: >-
+      {{
+        {
+          'ide2': 'media=cdrom,' ~
+                  (proxmox_automatic_storage | default(proxmox_automatic_pve_iso_storage)) ~
+                  ':iso/' ~ proxmox_automatic_primary_cdrom_iso ~ '.iso'
+        }
+        |
+        combine(
+          {
+            'ide3': 'media=cdrom,' ~
+                    (proxmox_automatic_storage | default(proxmox_automatic_pve_iso_storage)) ~
+                    ':iso/' ~ proxmox_automatic_secondary_cdrom_iso ~ '.iso'
+          }
+          if proxmox_automatic_secondary_cdrom_iso is defined and proxmox_automatic_secondary_cdrom_iso | length > 0
+          else {}
+        )
+      }}
+
 - name: "Create VM"
   community.proxmox.proxmox_kvm:
     api_host: "{{ proxmox_automatic_api_host }}"
@@ -64,19 +85,13 @@
     cpu: "{{ proxmox_automatic_cpu_type | default('x86-64-v3') }}"
     sockets: "{{ proxmox_automatic_sockets | default(1) }}"
     state: "{{ proxmox_automatic_state | default('present') }}"
-    ide:
-      ide2: >-
-        media=cdrom,{{ proxmox_automatic_storage | default(proxmox_automatic_pve_iso_storage) }}:iso/{{
-        proxmox_automatic_iso_name }}.iso
-      ide3: >-
-        media=cdrom,{{ proxmox_automatic_storage | default(proxmox_automatic_pve_iso_storage) }}:iso/ks-{{
-        ansible_host }}.iso
+    ide: "{{ vm_ide_config }}"
     bios: ovmf
     efidisk0:
       storage: "{{ proxmox_automatic_storage | default(proxmox_automatic_pve_vm_storage) }}"
       efitype: 4m
       format: raw
-      pre_enrolled_keys: true
+      pre_enrolled_keys: "{{ proxmox_automatic_efi_pre_enrolled_keys | bool }}"
     tpmstate0:
       storage: "{{ proxmox_automatic_storage | default(proxmox_automatic_pve_vm_storage) }}"
     virtio: "{{ virtio_config }}"
@@ -87,6 +102,7 @@
     scsihw: "{{ proxmox_automatic_scsi_hw | default('virtio-scsi-single') }}"
     machine: "{{ proxmox_automatic_machine | default('q35') }}"
     hotplug: "{{ proxmox_automatic_hotplug | default('disk') }}"
+    vga: "{{ proxmox_automatic_vga | default(omit) }}"
     startup: >-
       {{ 'order=' + (proxmox_automatic_boot_order | default(1) | string) + ',up=' +
       (proxmox_automatic_boot_order_up_wait | default(2) | string) + ',down=' +
@@ -104,15 +120,54 @@
     seconds: "{{ proxmox_automatic_create_vm_pause | default(10) }}"
   when: proxmox_automatic_create_vm_pause is defined or proxmox_automatic_create_vm_throttle is defined
 
-- name: "Generate HA group name from hypervisor"
+- name: "Set effective HA rule name from explicit configuration"
   ansible.builtin.set_fact:
-    proxmox_automatic_ha_group: "ha-group-{{ proxmox_automatic_hypervisor | regex_replace('\\..*$', '') }}"
+    proxmox_automatic_ha_rule_name_effective: "{{ proxmox_automatic_ha_group }}"
+  when:
+    - proxmox_automatic_ha_enabled | bool
+    - proxmox_automatic_ha_group | length > 0
+
+- name: "Generate effective HA rule name from hypervisor"
+  ansible.builtin.set_fact:
+    proxmox_automatic_ha_rule_name_effective: "ha-group-{{ proxmox_automatic_hypervisor | regex_replace('\\..*$', '') }}"
   when:
     - proxmox_automatic_ha_enabled | bool
     - proxmox_automatic_ha_group_auto | bool
     - proxmox_automatic_ha_group | length == 0
 
-- name: "Add VM {{ proxmox_automatic_vmid }} to HA group {{ proxmox_automatic_ha_group }}"
+- name: "Build effective HA rule nodes"
+  ansible.builtin.set_fact:
+    proxmox_automatic_ha_rule_nodes_effective: >-
+      {%- if proxmox_automatic_ha_group_nodes | length > 0 -%}
+      {%-   set raw_nodes = proxmox_automatic_ha_group_nodes.split(',') | map('trim') | reject('equalto', '') | list -%}
+      {%-   set parsed = namespace(items=[], max_priority=0) -%}
+      {%-   for raw_node in raw_nodes -%}
+      {%-     set node_name = raw_node.split(':')[0] | trim -%}
+      {%-     set node_priority = (raw_node.split(':')[1] | trim | int) if ':' in raw_node else 0 -%}
+      {%-     set _ = parsed.items.append({'name': node_name, 'priority': node_priority}) -%}
+      {%-     if node_priority > parsed.max_priority -%}
+      {%-       set parsed.max_priority = node_priority -%}
+      {%-     endif -%}
+      {%-   endfor -%}
+      {%-   set normalized = namespace(items=[]) -%}
+      {%-   for parsed_node in parsed.items -%}
+      {%-     set _ = normalized.items.append(parsed_node.name ~ ':' ~ (parsed.max_priority - parsed_node.priority + 1)) -%}
+      {%-   endfor -%}
+      {{ normalized.items | join(',') }}
+      {%- else -%}
+      {%-   set ordered_nodes = ([proxmox_automatic_hypervisor] + ((ansible_play_hosts | map('extract', hostvars, 'proxmox_automatic_hypervisor') | unique | list) | difference([proxmox_automatic_hypervisor]))) -%}
+      {%-   set generated = namespace(items=[]) -%}
+      {%-   for node in ordered_nodes -%}
+      {%-     set _ = generated.items.append(node ~ ':' ~ (ordered_nodes | length - loop.index0)) -%}
+      {%-   endfor -%}
+      {{ generated.items | join(',') }}
+      {%- endif -%}
+  when:
+    - proxmox_automatic_ha_enabled | bool
+    - proxmox_automatic_ha_rule_name_effective is defined
+    - proxmox_automatic_ha_rule_name_effective | length > 0
+
+- name: "Add VM as HA resource"
   community.proxmox.proxmox_cluster_ha_resources:
     api_host: "{{ proxmox_automatic_api_host }}"
     api_user: "{{ proxmox_automatic_api_user }}"
@@ -121,7 +176,6 @@
     api_token_secret: "{{ proxmox_automatic_api_token_secret | default(omit) }}"
     validate_certs: "{{ proxmox_automatic_api_validate_certs | default(false) }}"
     name: "vm:{{ proxmox_automatic_vmid }}"
-    group: "{{ proxmox_automatic_ha_group }}"
     hastate: "{{ proxmox_automatic_ha_state }}"
     max_restart: "{{ proxmox_automatic_ha_max_restart }}"
     max_relocate: "{{ proxmox_automatic_ha_max_relocate }}"
@@ -130,7 +184,134 @@
   delegate_to: localhost
   when:
     - proxmox_automatic_ha_enabled | bool
-    - proxmox_automatic_ha_group | length > 0
+
+- name: "Initialize aggregated HA rule profiles"
+  ansible.builtin.set_fact:
+    proxmox_automatic_ha_rule_profiles: {}
+  run_once: true
+  delegate_to: localhost
+  when: proxmox_automatic_ha_enabled | bool
+
+- name: "Authenticate to Proxmox API for HA rule reads"
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_automatic_api_host }}:8006/api2/json/access/ticket"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: "{{ proxmox_automatic_api_user }}"
+      password: "{{ proxmox_automatic_api_password }}"
+    validate_certs: "{{ proxmox_automatic_api_validate_certs | default(false) }}"
+  register: proxmox_automatic_ha_ticket
+  run_once: true
+  delegate_to: localhost
+  when:
+    - proxmox_automatic_ha_enabled | bool
+    - proxmox_automatic_api_token_id | default('') | length == 0
+
+- name: "Read existing HA rules from Proxmox"
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_automatic_api_host }}:8006/api2/json/cluster/ha/rules"
+    method: GET
+    headers: >-
+      {{
+        {'Authorization': 'PVEAPIToken=' ~ proxmox_automatic_api_token_id ~ '=' ~ proxmox_automatic_api_token_secret}
+        if proxmox_automatic_api_token_id | default('') | length > 0
+        else {'Cookie': 'PVEAuthCookie=' ~ proxmox_automatic_ha_ticket.json.data.ticket}
+      }}
+    validate_certs: "{{ proxmox_automatic_api_validate_certs | default(false) }}"
+  register: proxmox_automatic_existing_ha_rules_response
+  failed_when: false
+  changed_when: false
+  run_once: true
+  delegate_to: localhost
+  when: proxmox_automatic_ha_enabled | bool
+
+- name: "Build existing HA rule resource map"
+  ansible.builtin.set_fact:
+    proxmox_automatic_existing_ha_rule_resources: >-
+      {{
+        proxmox_automatic_existing_ha_rules_response.json.data
+        | default([])
+        | items2dict(key_name='rule', value_name='resources')
+      }}
+  run_once: true
+  delegate_to: localhost
+  when: proxmox_automatic_ha_enabled | bool
+
+- name: "Validate HA rule profile consistency"
+  ansible.builtin.assert:
+    that:
+      - existing_profile.nodes == hostvars[item].proxmox_automatic_ha_rule_nodes_effective.split(',')
+      - existing_profile.strict == ((hostvars[item]['proxmox_automatic_ha_group_restricted'] | default(false)) | bool)
+    fail_msg: >-
+      Conflicting HA rule settings detected for rule {{ hostvars[item].proxmox_automatic_ha_rule_name_effective }}.
+      Shared HA rules require identical node priorities and strict settings across all VMs using the same rule name.
+  vars:
+    existing_profile: "{{ proxmox_automatic_ha_rule_profiles[hostvars[item].proxmox_automatic_ha_rule_name_effective] }}"
+  loop: "{{ ansible_play_hosts }}"
+  run_once: true
+  delegate_to: localhost
+  when:
+    - hostvars[item].proxmox_automatic_ha_enabled | bool
+    - hostvars[item].proxmox_automatic_ha_group_manage | bool
+    - hostvars[item].proxmox_automatic_ha_rule_name_effective is defined
+    - hostvars[item].proxmox_automatic_ha_rule_name_effective | length > 0
+    - hostvars[item].proxmox_automatic_ha_rule_name_effective in (proxmox_automatic_ha_rule_profiles | default({}))
+
+- name: "Aggregate HA rule profiles"
+  ansible.builtin.set_fact:
+    proxmox_automatic_ha_rule_profiles: >-
+      {{
+        proxmox_automatic_ha_rule_profiles | combine({
+          rule_name: {
+            'nodes': existing_profile.nodes,
+            'strict': existing_profile.strict,
+            'comment': existing_profile.comment,
+            'resources': (existing_profile.resources + ['vm:' ~ (hostvars[item].proxmox_automatic_vmid | string)]) | unique
+          }
+        }, recursive=True)
+      }}
+  vars:
+    rule_name: "{{ hostvars[item].proxmox_automatic_ha_rule_name_effective }}"
+    existing_profile: >-
+      {{
+        proxmox_automatic_ha_rule_profiles.get(rule_name, {
+          'nodes': hostvars[item].proxmox_automatic_ha_rule_nodes_effective.split(','),
+          'strict': ((hostvars[item]['proxmox_automatic_ha_group_restricted'] | default(false)) | bool),
+          'comment': (hostvars[item]['proxmox_automatic_ha_group_comment'] | default('')),
+          'resources': ((proxmox_automatic_existing_ha_rule_resources.get(rule_name, '') | split(',')) if (proxmox_automatic_existing_ha_rule_resources.get(rule_name, '') | length > 0) else [])
+        })
+      }}
+  loop: "{{ ansible_play_hosts }}"
+  run_once: true
+  delegate_to: localhost
+  when:
+    - hostvars[item].proxmox_automatic_ha_enabled | bool
+    - hostvars[item].proxmox_automatic_ha_group_manage | bool
+    - hostvars[item].proxmox_automatic_ha_rule_name_effective is defined
+    - hostvars[item].proxmox_automatic_ha_rule_name_effective | length > 0
+
+- name: "Create aggregated HA node-affinity rules"
+  community.proxmox.proxmox_cluster_ha_rules:
+    api_host: "{{ proxmox_automatic_api_host }}"
+    api_user: "{{ proxmox_automatic_api_user }}"
+    api_password: "{{ proxmox_automatic_api_password }}"
+    api_token_id: "{{ proxmox_automatic_api_token_id | default(omit) }}"
+    api_token_secret: "{{ proxmox_automatic_api_token_secret | default(omit) }}"
+    validate_certs: "{{ proxmox_automatic_api_validate_certs | default(false) }}"
+    name: "{{ item.key }}"
+    state: present
+    type: node-affinity
+    resources: "{{ item.value.resources }}"
+    nodes: "{{ item.value.nodes }}"
+    strict: "{{ item.value.strict }}"
+    comment: "{{ item.value.comment if item.value.comment | length > 0 else omit }}"
+  loop: "{{ (proxmox_automatic_ha_rule_profiles | default({})) | dict2items }}"
+  run_once: true
+  delegate_to: localhost
+  when:
+    - proxmox_automatic_ha_enabled | bool
+    - proxmox_automatic_ha_rule_profiles | default({}) | length > 0
 
 - name: "Start VM"
   community.proxmox.proxmox_kvm:

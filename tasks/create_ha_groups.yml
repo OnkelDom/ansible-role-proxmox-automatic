@@ -1,6 +1,8 @@
 ---
-# Ensure HA groups exist before creating VMs
-- name: "Collect all unique hypervisors for HA groups"
+# Proxmox VE 9 migrated HA groups to HA rules. Keep the preparatory task path
+# but only gather cluster node preferences here; the actual resource/rule
+# creation happens in create_vm.yml after the VM exists.
+- name: "Collect all unique hypervisors for HA rules"
   ansible.builtin.set_fact:
     all_hypervisors: "{{ ansible_play_hosts | map('extract', hostvars, 'proxmox_automatic_hypervisor') | unique | list }}"
   run_once: true
@@ -11,57 +13,14 @@
   tags:
     - proxmox_automatic_ha
 
-- name: "Create HA groups for all hypervisors"
-  community.proxmox.proxmox_cluster_ha_groups:
-    api_host: "{{ proxmox_automatic_api_host }}"
-    api_user: "{{ proxmox_automatic_api_user }}"
-    api_password: "{{ proxmox_automatic_api_password }}"
-    api_token_id: "{{ proxmox_automatic_api_token_id | default(omit) }}"
-    api_token_secret: "{{ proxmox_automatic_api_token_secret | default(omit) }}"
-    validate_certs: "{{ proxmox_automatic_api_validate_certs | default(false) }}"
-    name: "ha-group-{{ item | regex_replace('\\..*$', '') }}"
-    nodes: >-
-      {{
-        ([item] + (all_hypervisors | difference([item])))
-        | zip(range(0, all_hypervisors | length))
-        | map('join', ':')
-        | join(',')
-      }}
-    nofailback: "{{ proxmox_automatic_ha_group_nofailback }}"
-    restricted: "{{ proxmox_automatic_ha_group_restricted }}"
-    comment: "Auto-managed HA group for {{ item }} - VMs prefer this node"
-    state: present
-  loop: "{{ all_hypervisors }}"
+- name: "Debug: Show collected hypervisors for HA rules"
+  ansible.builtin.debug:
+    msg: "Found hypervisors for HA rules: {{ all_hypervisors }}"
   run_once: true
   delegate_to: localhost
   when:
     - proxmox_automatic_ha_enabled | bool
     - proxmox_automatic_ha_group_auto | bool
-    - proxmox_automatic_ha_group_manage | bool
-  tags:
-    - proxmox_automatic_ha
-
-- name: "Create manual HA group"
-  community.proxmox.proxmox_cluster_ha_groups:
-    api_host: "{{ proxmox_automatic_api_host }}"
-    api_user: "{{ proxmox_automatic_api_user }}"
-    api_password: "{{ proxmox_automatic_api_password }}"
-    api_token_id: "{{ proxmox_automatic_api_token_id | default(omit) }}"
-    api_token_secret: "{{ proxmox_automatic_api_token_secret | default(omit) }}"
-    validate_certs: "{{ proxmox_automatic_api_validate_certs | default(false) }}"
-    name: "{{ proxmox_automatic_ha_group }}"
-    nodes: "{{ proxmox_automatic_ha_group_nodes }}"
-    nofailback: "{{ proxmox_automatic_ha_group_nofailback }}"
-    restricted: "{{ proxmox_automatic_ha_group_restricted }}"
-    comment: "{{ proxmox_automatic_ha_group_comment | default('Manually managed HA group') }}"
-    state: present
-  run_once: true
-  delegate_to: localhost
-  when:
-    - proxmox_automatic_ha_enabled | bool
-    - not (proxmox_automatic_ha_group_auto | bool)
-    - proxmox_automatic_ha_group_manage | bool
-    - proxmox_automatic_ha_group | length > 0
-    - proxmox_automatic_ha_group_nodes | length > 0
+    - all_hypervisors | default([]) | length > 0
   tags:
     - proxmox_automatic_ha

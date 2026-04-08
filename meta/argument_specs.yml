@@ -1,9 +1,9 @@
 ---
 argument_specs:
   main:
-    short_description: "Automated VM provisioning with Kickstart ISO on Proxmox VE"
+    short_description: "Automated VM provisioning with unattended installer media on Proxmox VE"
     description: >-
-      This role generates individual Kickstart files and ISOs,
+      This role generates backend-specific unattended installer media,
       uploads them to a Proxmox node and provisions VMs
       including additional disks and network interfaces.
     options:
@@ -13,20 +13,67 @@ argument_specs:
         default: false
         description: "Automatically install dependencies (xorriso, syslinux) on Ansible Controller"
 
+      proxmox_automatic_installer_backend:
+        type: str
+        default: "rocky_kickstart"
+        choices: ["rocky_kickstart", "debian13_preseed"]
+        description: "Installer backend used to generate unattended installation media"
+
       proxmox_automatic_files_dir:
         type: str
         default: "kickstart-files"
-        description: "Path for Kickstart files"
+        description: "Path for generated Kickstart and Preseed files"
 
       proxmox_automatic_iso_dir:
         type: str
         default: "kickstart-isos"
         description: "Path for generated ISO files"
 
+      proxmox_automatic_iso_build_dir:
+        type: str
+        default: "kickstart-isos/build"
+        description: "Path for temporary ISO extraction and remastering workspaces"
+
       proxmox_automatic_iso_name:
         type: str
         default: "rocky9.6-ks"
-        description: "Name of the Kickstart ISO file (without .iso)"
+        description: "Backward-compatible source installer ISO name (without .iso)"
+
+      proxmox_automatic_source_iso_name:
+        type: str
+        default: "rocky9.6-ks"
+        description: "Source installer ISO name (without .iso) used by the selected backend"
+
+      proxmox_automatic_source_iso_path:
+        type: str
+        default: ""
+        description: "Optional absolute source ISO path on the controller for remastering workflows"
+
+      proxmox_automatic_generated_iso_name:
+        type: str
+        default: ""
+        description: "Optional override for the generated backend-specific ISO name (without .iso)"
+
+      proxmox_automatic_install_source:
+        type: str
+        default: "online"
+        choices: ["online", "cdrom"]
+        description: "Controls whether the installer should use online repositories or only the attached installation media. Debian cdrom mode assumes the ISO already contains the required packages."
+
+      proxmox_automatic_kickstart_template:
+        type: str
+        default: "kickstart.cfg.j2"
+        description: "Template used for the Rocky Kickstart configuration"
+
+      proxmox_automatic_preseed_template:
+        type: str
+        default: "preseed.cfg.j2"
+        description: "Template used for the Debian preseed configuration"
+
+      proxmox_automatic_skip_iso_upload:
+        type: bool
+        default: false
+        description: "Skip Proxmox ISO upload. Intended for controller-side tests."
 
       # Proxmox API Configuration
       proxmox_automatic_api_host:
@@ -237,6 +284,74 @@ argument_specs:
         default: ["0.de.pool.ntp.org", "1.de.pool.ntp.org", "2.de.pool.ntp.org", "3.de.pool.ntp.org"]
         description: "List of NTP servers"
 
+      proxmox_automatic_debian_suite:
+        type: str
+        default: "trixie"
+        description: "Debian suite used by the Debian preseed backend"
+
+      proxmox_automatic_debian_mirror:
+        type: str
+        default: "deb.debian.org"
+        description: "Debian package mirror host"
+
+      proxmox_automatic_debian_mirror_directory:
+        type: str
+        default: "/debian"
+        description: "Debian package mirror directory"
+
+      proxmox_automatic_debian_security_host:
+        type: str
+        default: "security.debian.org"
+        description: "Debian security mirror host"
+
+      proxmox_automatic_debian_tasksel:
+        type: list
+        elements: str
+        default: ["standard", "ssh-server"]
+        description: "Tasksel roles installed by the Debian preseed backend"
+
+      proxmox_automatic_debian_packages_default:
+        type: list
+        elements: str
+        default: []
+        description: "Backend-specific default package list for Debian preseed"
+
+      proxmox_automatic_debian_interface_prefix:
+        type: str
+        default: "enp6s"
+        description: "Prefix used to derive Debian installer NIC names from netX definitions"
+
+      proxmox_automatic_debian_interface_index_start:
+        type: int
+        default: 18
+        description: "Start index used to derive Debian installer NIC names from netX definitions"
+
+      proxmox_automatic_debian_partition_recipe_override:
+        type: str
+        default: ""
+        description: "Optional raw Debian partman expert recipe override"
+
+      proxmox_automatic_debian_late_command_extra:
+        type: list
+        elements: str
+        default: []
+        description: "Additional raw commands appended to Debian preseed late_command"
+
+      proxmox_automatic_debian_purge_microcode:
+        type: bool
+        default: true
+        description: "Purge guest CPU microcode packages after Debian installation and rebuild initramfs and GRUB"
+
+      proxmox_automatic_debian_disable_network_manager:
+        type: bool
+        default: true
+        description: "Disable NetworkManager in Debian late_command when present"
+
+      proxmox_automatic_debian_root_login:
+        type: bool
+        default: false
+        description: "Enable direct root login during Debian installation"
+
       proxmox_automatic_selinux_mode:
         type: str
         choices: ["enforcing", "permissive", "disabled"]
@@ -353,7 +468,7 @@ argument_specs:
         type: list
         elements: str
         default: []
-        description: "Default packages installed on all VMs (base system)"
+        description: "Optional backend-agnostic package override applied instead of backend defaults"
 
       proxmox_automatic_packages_additional:
         type: list
@@ -480,37 +595,37 @@ argument_specs:
       proxmox_automatic_ha_group_manage:
         type: bool
         default: true
-        description: "Automatically create/manage the HA group if it doesn't exist"
+        description: "Automatically create/manage the Proxmox HA rule if it doesn't exist"
 
       proxmox_automatic_ha_group_auto:
         type: bool
         default: true
-        description: "Automatically generate HA group per hypervisor (format: ha-group-<hypervisor>)"
+        description: "Automatically generate a shared HA rule per hypervisor (format: ha-group-<hypervisor>)"
 
       proxmox_automatic_ha_group:
         type: str
         default: ""
-        description: "HA group name to assign the VM to (auto-generated if empty and ha_group_auto is true)"
+        description: "HA rule name to assign the VM to (auto-generated if empty and ha_group_auto is true)"
 
       proxmox_automatic_ha_group_nodes:
         type: str
         default: ""
-        description: "Comma-separated list of nodes with priorities (e.g., 'node1:0,node2:1,node3:2')"
+        description: "Comma-separated list of nodes with priorities (e.g., 'node1:0,node2:1,node3:2') for the shared HA rule"
 
       proxmox_automatic_ha_group_nofailback:
         type: bool
         default: false
-        description: "If true, HA manager won't migrate back to preferred nodes"
+        description: "Legacy HA-group compatibility flag; kept for backward compatibility but not applied to Proxmox HA rules"
 
       proxmox_automatic_ha_group_restricted:
         type: bool
         default: false
-        description: "If true, only resources in this group can run on these nodes"
+        description: "If true, only resources in this HA rule can run on these nodes"
 
       proxmox_automatic_ha_group_comment:
         type: str
         default: ""
-        description: "Optional comment for the HA group"
+        description: "Optional comment for the HA rule"
 
       proxmox_automatic_ha_state:
         type: str
