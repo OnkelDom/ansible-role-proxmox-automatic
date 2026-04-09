@@ -1,2 +1,0 @@
----
-proxmox_automatic_preseed_template: "{{ inventory_dir }}/preseed/opencode.lenmail.de.conf"

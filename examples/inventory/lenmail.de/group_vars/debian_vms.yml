@@ -1,5 +1,0 @@
----
-proxmox_automatic_installer_backend: "debian13_preseed"
-proxmox_automatic_install_source: "online"
-proxmox_automatic_debian_suite: "trixie"
-proxmox_automatic_source_iso_path: "/srv/iso/debian-13.4.0-amd64-DVD-1.iso"

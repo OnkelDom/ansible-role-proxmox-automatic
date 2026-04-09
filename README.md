@@ -106,8 +106,6 @@ Usage:
 ansible-playbook -i examples/inventory/hosts.yml examples/playbook.yml
 ```
 
-A preserved legacy inventory with exact Debian preseed snapshots from ansible-infra-lenmail is available under examples/inventory/lenmail.de.
-
 The example inventory demonstrates:
 - shared API, storage and HA settings in `group_vars/all.yml`
 - backend-specific defaults in `group_vars/rocky_vms.yml` and `group_vars/debian_vms.yml`
