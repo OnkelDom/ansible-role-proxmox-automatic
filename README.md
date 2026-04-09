@@ -80,7 +80,7 @@ db01 proxmox_automatic_vmid=102 ansible_host=db01.example.com
 
 ### Example Inventory Layout
 
-This repository ships a complete example inventory under [examples/inventory](/Users/dominik.lenhardt/git/ansible_roles/ansible-role-proxmox-automatic/examples/inventory) plus an example playbook at [examples/playbook.yml](/Users/dominik.lenhardt/git/ansible_roles/ansible-role-proxmox-automatic/examples/playbook.yml).
+This repository ships a complete example inventory under `examples/inventory` plus an example playbook at `examples/playbook.yml`.
 
 Structure:
 
@@ -105,6 +105,8 @@ Usage:
 ```bash
 ansible-playbook -i examples/inventory/hosts.yml examples/playbook.yml
 ```
+
+A preserved legacy inventory with exact Debian preseed snapshots from ansible-infra-lenmail is available under examples/inventory/lenmail.de.
 
 The example inventory demonstrates:
 - shared API, storage and HA settings in `group_vars/all.yml`

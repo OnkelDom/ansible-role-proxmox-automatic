@@ -1,0 +1,2 @@
+---
+proxmox_automatic_preseed_template: "{{ inventory_dir }}/preseed/openclaw.lenmail.de.conf"

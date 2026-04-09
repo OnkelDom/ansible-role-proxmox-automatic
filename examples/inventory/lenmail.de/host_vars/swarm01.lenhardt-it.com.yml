@@ -1,0 +1,11 @@
+---
+proxmox_automatic_api_host: "pve01.lenhardt-it.com"
+proxmox_automatic_hypervisor: "pve01"
+proxmox_automatic_preseed_template: "{{ inventory_dir }}/preseed/swarm01.lenhardt-it.com.conf"
+proxmox_automatic_additional_hosts:
+  - ip: "10.30.30.12"
+    hostname: "swarm02.lenhardt-it.com"
+    comment: "Swarm Server"
+  - ip: "10.30.30.13"
+    hostname: "swarm03.lenhardt-it.com"
+    comment: "Swarm Server"
