@@ -154,8 +154,8 @@
   ansible.builtin.set_fact:
     proxmox_automatic_vmid: >-
       {{ '%04d%03d' | format(
-          ((proxmox_automatic_networks | selectattr('name','equalto','net0') | first).vlanid | int),
-          ((proxmox_automatic_networks | selectattr('name','equalto','net0') | first).ip.split('.')[-1] | int)
+          (((proxmox_automatic_networks | selectattr('name','equalto','net0') | first | default(proxmox_automatic_networks[0])).vlanid | default(0)) | int),
+          ((((proxmox_automatic_networks | selectattr('name','equalto','net0') | first | default(proxmox_automatic_networks[0])).ip | default('0.0.0.0')).split('.')[-1]) | int)
       ) }}
   when: proxmox_automatic_vmid is not defined and proxmox_automatic_networks | length > 0
   tags:
