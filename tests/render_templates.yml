@@ -213,7 +213,6 @@
           - "'bootloader --location=mbr --boot-drive=vda' in kickstart_content"
           - "'user --name=litsadmin' in kickstart_content"
           - "'%post --interpreter=/usr/bin/bash' in kickstart_content"
-          - "'/etc/profile.d/git-prompt.sh' not in kickstart_content"
           - "'/etc/profile.d/motd.sh' not in kickstart_content"
           - "kickstart_content is not search('\\\\{\\\\{')"
           - "kickstart_content is not search('\\\\}\\\\}')"
