@@ -34,13 +34,13 @@
         net_config | default({}) | combine({
           item.name: [
             'virtio',
-            ('=' + item.mac if item.mac is defined else ','),
+            ('=' + item.get('mac') if item.get('mac') else ','),
             ',bridge=',
-            (item.bridge | default(proxmox_automatic_defaultbridge)),
+            (item.get('bridge', proxmox_automatic_defaultbridge)),
             ',tag=',
-            (item.vlanid | string),
-            ((',mtu=' + item.mtu | string) if item.mtu is defined else ''),
-            ((',rate=' + item.rate | string) if item.rate is defined else '')
+            (item.get('vlanid', 0) | string),
+            ((',mtu=' + (item.get('mtu') | string)) if item.get('mtu') is not none else ''),
+            ((',rate=' + (item.get('rate') | string)) if item.get('rate') is not none else '')
           ] | join('')
         })
       }}
@@ -252,8 +252,8 @@
   run_once: true
   delegate_to: localhost
   when:
-    - hostvars[item].proxmox_automatic_ha_enabled | bool
-    - hostvars[item].proxmox_automatic_ha_group_manage | bool
+    - (hostvars[item]['proxmox_automatic_ha_enabled'] | default(false)) | bool
+    - (hostvars[item]['proxmox_automatic_ha_group_manage'] | default(false)) | bool
     - hostvars[item].proxmox_automatic_ha_rule_name_effective is defined
     - hostvars[item].proxmox_automatic_ha_rule_name_effective | length > 0
     - hostvars[item].proxmox_automatic_ha_rule_name_effective in (proxmox_automatic_ha_rule_profiles | default({}))
@@ -286,8 +286,8 @@
   run_once: true
   delegate_to: localhost
   when:
-    - hostvars[item].proxmox_automatic_ha_enabled | bool
-    - hostvars[item].proxmox_automatic_ha_group_manage | bool
+    - (hostvars[item]['proxmox_automatic_ha_enabled'] | default(false)) | bool
+    - (hostvars[item]['proxmox_automatic_ha_group_manage'] | default(false)) | bool
     - hostvars[item].proxmox_automatic_ha_rule_name_effective is defined
     - hostvars[item].proxmox_automatic_ha_rule_name_effective | length > 0
 
