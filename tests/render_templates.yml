@@ -474,6 +474,7 @@
                     fstype: xfs
         proxmox_automatic_networks:
           - name: net0
+            interface_name: ens18
             bridge: vmbr1
             vlanid: 3
             ip: "192.0.2.21"
@@ -745,6 +746,7 @@
             netmask: "255.255.255.0"
             gateway: "192.0.2.1"
           - name: net1
+            interface_name: ens19
             bridge: vmbr1
             vlanid: 7
             ip: "10.30.70.31"
@@ -782,8 +784,8 @@
           - "'d-i apt-setup/cdrom/set-failed boolean false' in preseed_content"
           - "'d-i mirror/http/hostname string' not in preseed_content"
           - "'d-i pkgsel/include string ca-certificates lvm2 openssh-server sudo vim xfsprogs' in preseed_content"
-          - "'iface enp6s18 inet static' in preseed_content"
-          - "'iface enp6s19 inet static' in preseed_content"
+          - "'iface ens18 inet static' in preseed_content"
+          - "'iface ens19 inet static' in preseed_content"
           - "'address 192.0.2.31' in preseed_content"
           - "'address 10.30.70.31' in preseed_content"
       vars:

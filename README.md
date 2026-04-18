@@ -121,6 +121,7 @@ proxmox_automatic_installer_backend: "debian13_preseed"
 proxmox_automatic_source_iso_path: "/srv/iso/debian-13.0.0-amd64-netinst.iso"
 proxmox_automatic_networks:
   - name: net0
+    interface_name: ens18
     bridge: vmbr1
     vlanid: 30
     ip: "192.0.2.11"

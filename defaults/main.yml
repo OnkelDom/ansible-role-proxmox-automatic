@@ -36,7 +36,7 @@ proxmox_automatic_debian_packages_default:
   - sudo
   - vim
   - xfsprogs
-proxmox_automatic_debian_interface_prefix: "enp6s"
+proxmox_automatic_debian_interface_prefix: "ens"
 proxmox_automatic_debian_interface_index_start: 18
 proxmox_automatic_debian_partition_recipe_override: ""
 proxmox_automatic_debian_late_command_extra: []
