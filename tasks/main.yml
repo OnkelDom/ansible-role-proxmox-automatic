@@ -81,7 +81,12 @@
 
 - name: "Process group_vars network config (override defaults)"
   ansible.builtin.set_fact:
-    network_dict: "{{ network_dict | combine({item.name: item}) }}"
+    network_dict: >-
+      {{
+        network_dict | combine({
+          item.name: network_dict[item.name] | default({}) | combine(item, recursive=True)
+        })
+      }}
   loop: "{{ proxmox_automatic_networks_group_vars | default([]) }}"
   tags:
     - proxmox_automatic
@@ -104,7 +109,12 @@
 
 - name: "Process host_vars network config (override group vars)"
   ansible.builtin.set_fact:
-    network_dict: "{{ network_dict | combine({item.name: item}) }}"
+    network_dict: >-
+      {{
+        network_dict | combine({
+          item.name: network_dict[item.name] | default({}) | combine(item, recursive=True)
+        })
+      }}
   loop: "{{ proxmox_automatic_networks_host_vars | default([]) }}"
   tags:
     - proxmox_automatic
@@ -127,7 +137,12 @@
 
 - name: "Process playbook network config (override host vars)"
   ansible.builtin.set_fact:
-    network_dict: "{{ network_dict | combine({item.name: item}) }}"
+    network_dict: >-
+      {{
+        network_dict | combine({
+          item.name: network_dict[item.name] | default({}) | combine(item, recursive=True)
+        })
+      }}
   loop: "{{ proxmox_automatic_networks_playbook | default(proxmox_automatic_networks | default([])) }}"
   tags:
     - proxmox_automatic
@@ -165,11 +180,7 @@
 
 - name: "Calculate VMID from network configuration if not defined"
   ansible.builtin.set_fact:
-    proxmox_automatic_vmid: >-
-      {{ '%04d%03d' | format(
-          (proxmox_automatic_primary_network.get('vlanid', 0) | int),
-          ((proxmox_automatic_primary_network.get('ip', '0.0.0.0').split('.')[-1]) | int)
-      ) }}
+    proxmox_automatic_vmid: "{{ ((proxmox_automatic_primary_network.get('vlanid', 0) | int) * 1000) + ((proxmox_automatic_primary_network.get('ip', '0.0.0.0').split('.')[-1]) | int) }}"
   when: proxmox_automatic_vmid is not defined and proxmox_automatic_networks | length > 0
   tags:
     - proxmox_automatic
