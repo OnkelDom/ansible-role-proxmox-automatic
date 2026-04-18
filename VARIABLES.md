@@ -208,12 +208,12 @@ This variable is ignored when `proxmox_automatic_install_source` is set to `cdro
 **Description:** Purges guest CPU microcode packages during `late_command` and rebuilds `initramfs` plus GRUB. This avoids broken Debian 13 initramfs artifacts observed on Proxmox/QEMU virtual CPUs when `intel-microcode` is auto-installed.
 
 ##### `proxmox_automatic_debian_interface_prefix`
-**Default:** `"enp6s"`  
-**Description:** Prefix used to derive predictable interface names from `net0`, `net1`, and so on.
+**Default:** `"ens"`  
+**Description:** Prefix used to derive Debian guest interface names from `net0`, `net1`, and so on when no explicit `interface_name` is set.
 
 ##### `proxmox_automatic_debian_interface_index_start`
 **Default:** `18`  
-**Description:** Start index used when translating `net0` to Debian installer NIC names.
+**Description:** Start index used when translating `net0` to Debian installer NIC names when no explicit `interface_name` is set.
 
 ## Proxmox API Configuration
 
@@ -506,12 +506,13 @@ proxmox_automatic_defaultbridge: "vmbr0"
 
 ##### `proxmox_automatic_networks`
 **Default:** `[]`  
-**Description:** List of network interfaces with static IP configuration (bridge, vlanid, ip, netmask, gateway, mtu, mac, model, ipv6, ipv6_gateway)
+**Description:** List of network interfaces with static IP configuration (bridge, vlanid, ip, netmask, gateway, mtu, mac, model, ipv6, ipv6_gateway, optional `interface_name`)
 
 **Example:**
 ```yaml
 proxmox_automatic_networks:
   - name: net0
+    interface_name: ens18
     bridge: vmbr0
     ip: "192.168.1.10"
     netmask: "255.255.255.0"
@@ -519,6 +520,7 @@ proxmox_automatic_networks:
     vlanid: 100
     mtu: 1500
   - name: net1
+    interface_name: ens19
     bridge: vmbr1
     ip: "10.0.0.10"
     netmask: "255.255.255.0"

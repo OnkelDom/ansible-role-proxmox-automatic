@@ -9,7 +9,7 @@
 {% set primary_user = merged_users[0] if merged_users | length > 0 else {} %}
 {% set extra_users = merged_users[1:] if merged_users | length > 1 else [] %}
 {% set interface_index = proxmox_automatic_debian_interface_index_start | int %}
-{% set interface_name = proxmox_automatic_debian_interface_prefix ~ interface_index %}
+{% set interface_name = primary_network.interface_name | default(proxmox_automatic_debian_interface_prefix ~ interface_index) %}
 {% set package_list = (proxmox_automatic_packages_effective + proxmox_automatic_packages_additional) | unique %}
 {% if proxmox_automatic_install_source == 'cdrom' %}
 {%   set package_list = package_list | reject('equalto', 'qemu-guest-agent') | list %}
@@ -272,11 +272,11 @@ d-i preseed/late_command string \
 {% if not proxmox_automatic_dhcp_enabled and proxmox_automatic_networks | length > 0 %}
     printf 'source /etc/network/interfaces.d/*.cfg\nauto lo\niface lo inet loopback\n' > /target/etc/network/interfaces; \
 {%   for network in proxmox_automatic_networks %}
-{%     set device = proxmox_automatic_debian_interface_prefix ~ (proxmox_automatic_debian_interface_index_start + (network.name | replace('net', '') | int)) %}
+{%     set device = network.interface_name | default(proxmox_automatic_debian_interface_prefix ~ (proxmox_automatic_debian_interface_index_start + (network.name | replace('net', '') | int))) %}
     printf '\nauto {{ device }}\niface {{ device }} inet static\n    address {{ network.ip }}\n    netmask {{ network.netmask }}\n{% if network.gateway is defined %}    gateway {{ network.gateway }}\n{% endif %}    dns-nameservers {{ proxmox_automatic_dns_servers | join(' ') }}\n' >> /target/etc/network/interfaces; \
 {%   endfor %}
 {% endif %}
-    in-target hostnamectl set-hostname {{ ansible_host }}; \
+    printf '%s\n' '{{ ansible_host.split(".")[0] }}' > /target/etc/hostname; \
     printf '127.0.0.1 localhost\n::1 localhost\n' > /target/etc/hosts; \
 {% if primary_network %}
     echo '{{ primary_network.ip }} {{ ansible_host }} {{ ansible_host.split(".")[0] }}' >> /target/etc/hosts; \
