@@ -223,14 +223,14 @@ d-i debian-installer/exit/poweroff boolean false
 # LATE COMMANDS
 ###############################################################################
 d-i preseed/late_command string \
+    in-target mkdir -p /etc/sudoers.d; \
 {% if primary_user and primary_user.ssh_key is defined and primary_user.ssh_key != '' %}
-    in-target mkdir -p /home/{{ primary_user.name }}/.ssh; \
-    in-target chmod 700 /home/{{ primary_user.name }}/.ssh; \
-    echo "{{ primary_user.ssh_key }}" > /target/home/{{ primary_user.name }}/.ssh/authorized_keys; \
-{%   for sshkey in primary_user.additional_ssh_keys | default([]) %}
-    echo "{{ sshkey }}" >> /target/home/{{ primary_user.name }}/.ssh/authorized_keys; \
+{%   set primary_user_ssh_keys = ([primary_user.ssh_key] + (primary_user.additional_ssh_keys | default([]))) | join('\n') | split('\n') | map('trim') | reject('equalto', '') | list %}
+    in-target install -d -m 700 /home/{{ primary_user.name }}/.ssh; \
+    in-target install -m 600 /dev/null /home/{{ primary_user.name }}/.ssh/authorized_keys; \
+{%   for sshkey in primary_user_ssh_keys %}
+    printf '%s\n' "{{ sshkey }}" >> /target/home/{{ primary_user.name }}/.ssh/authorized_keys; \
 {%   endfor %}
-    in-target chmod 600 /home/{{ primary_user.name }}/.ssh/authorized_keys; \
     in-target chown -R {{ primary_user.name }}:{{ primary_user.name }} /home/{{ primary_user.name }}/.ssh; \
 {% endif %}
 {% for user in extra_users %}
@@ -243,22 +243,21 @@ d-i preseed/late_command string \
 {%     endif %}
 {%   endif %}
 {%   if user.ssh_key is defined and user.ssh_key != '' %}
-    in-target mkdir -p /home/{{ user.name }}/.ssh; \
-    in-target chmod 700 /home/{{ user.name }}/.ssh; \
-    echo "{{ user.ssh_key }}" > /target/home/{{ user.name }}/.ssh/authorized_keys; \
-{%     for sshkey in user.additional_ssh_keys | default([]) %}
-    echo "{{ sshkey }}" >> /target/home/{{ user.name }}/.ssh/authorized_keys; \
+{%     set extra_user_ssh_keys = ([user.ssh_key] + (user.additional_ssh_keys | default([]))) | join('\n') | split('\n') | map('trim') | reject('equalto', '') | list %}
+    in-target install -d -m 700 /home/{{ user.name }}/.ssh; \
+    in-target install -m 600 /dev/null /home/{{ user.name }}/.ssh/authorized_keys; \
+{%     for sshkey in extra_user_ssh_keys %}
+    printf '%s\n' "{{ sshkey }}" >> /target/home/{{ user.name }}/.ssh/authorized_keys; \
 {%     endfor %}
-    in-target chmod 600 /home/{{ user.name }}/.ssh/authorized_keys; \
     in-target chown -R {{ user.name }}:{{ user.name }} /home/{{ user.name }}/.ssh; \
 {%   endif %}
 {%   if user.sudo_commands is defined %}
-    echo "{{ user.name }} ALL=(ALL) {% if user.sudo_nopasswd | default(true) %}NOPASSWD: {% endif %}{{ user.sudo_commands }}" > /target/etc/sudoers.d/user_{{ user.name }}; \
+    printf '%s\n' "{{ user.name }} ALL=(ALL) {% if user.sudo_nopasswd | default(true) %}NOPASSWD:{% endif %} {{ user.sudo_commands }}" > /target/etc/sudoers.d/user_{{ user.name }}; \
     in-target chmod 440 /etc/sudoers.d/user_{{ user.name }}; \
 {%   endif %}
 {% endfor %}
 {% if primary_user and primary_user.sudo_commands is defined %}
-    echo "{{ primary_user.name }} ALL=(ALL) {% if primary_user.sudo_nopasswd | default(true) %}NOPASSWD: {% endif %}{{ primary_user.sudo_commands }}" > /target/etc/sudoers.d/user_{{ primary_user.name }}; \
+    printf '%s\n' "{{ primary_user.name }} ALL=(ALL) {% if primary_user.sudo_nopasswd | default(true) %}NOPASSWD:{% endif %} {{ primary_user.sudo_commands }}" > /target/etc/sudoers.d/user_{{ primary_user.name }}; \
     in-target chmod 440 /etc/sudoers.d/user_{{ primary_user.name }}; \
 {% endif %}
 {% for key, value in proxmox_automatic_sysctl_settings.items() %}
