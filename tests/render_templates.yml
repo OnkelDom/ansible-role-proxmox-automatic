@@ -250,6 +250,87 @@
       vars:
         preseed_content: "{{ proxmox_automatic_preseed_rendered.content | b64decode }}"
 
+    - name: Apply Debian additional disk scenario facts
+      ansible.builtin.set_fact:
+        proxmox_automatic_storage_config:
+          - name: virtio0
+            size: "20"
+            disk: vda
+            bootloader: true
+            partitions:
+              - name: efi
+                mount: /boot/efi
+                size: 1024
+                fstype: efi
+                primary: true
+              - name: boot
+                mount: /boot
+                size: 1024
+                fstype: ext4
+                primary: true
+              - name: pv.root
+                size: 1024
+                grow: true
+                primary: true
+                type: pv
+            vg:
+              - name: system
+                lv:
+                  - name: root
+                    mount: /
+                    size: 1024
+                    grow: true
+                    fstype: xfs
+                  - name: log
+                    mount: /var/log
+                    size: 4096
+                    fstype: xfs
+                  - name: swap
+                    mount: swap
+                    size: 2048
+                    fstype: swap
+          - name: virtio1
+            size: "100"
+            disk: vdb
+            vg:
+              - name: content
+                lv:
+                  - name: prometheus
+                    mount: /var/lib/prometheus
+                    size: 96
+                    fstype: xfs
+                  - name: alertmanager
+                    mount: /var/lib/alertmanager
+                    size: 4
+                    fstype: xfs
+
+    - name: Render Debian preseed template with additional disk
+      ansible.builtin.template:
+        src: "{{ [playbook_dir, '..', 'templates', 'preseed.cfg.j2'] | path_join | realpath }}"
+        dest: "{{ proxmox_automatic_test_render_dir.path }}/preseed-extra-disk.cfg"
+        mode: "0644"
+      vars:
+        template_render_time: "test"
+
+    - name: Read Debian preseed extra disk file
+      ansible.builtin.slurp:
+        src: "{{ proxmox_automatic_test_render_dir.path }}/preseed-extra-disk.cfg"
+      register: proxmox_automatic_preseed_extra_disk_rendered
+
+    - name: Assert Debian preseed additional disk content
+      ansible.builtin.assert:
+        that:
+          - "'/sbin/wipefs -a /dev/vdb || true' in preseed_content"
+          - "'/sbin/parted -s /dev/vdb mklabel gpt' in preseed_content"
+          - "'in-target /sbin/pvcreate -ff -y /dev/vdb1' in preseed_content"
+          - "'in-target /sbin/vgcreate content /dev/vdb1' in preseed_content"
+          - "'in-target /sbin/lvcreate -L 96G -n prometheus content' in preseed_content"
+          - "'in-target /sbin/lvcreate -L 4G -n alertmanager content' in preseed_content"
+          - "'/dev/content/prometheus /var/lib/prometheus xfs defaults 0 2' in preseed_content"
+          - "'in-target mount -a || true' in preseed_content"
+      vars:
+        preseed_content: "{{ proxmox_automatic_preseed_extra_disk_rendered.content | b64decode }}"
+
     - name: Remove temporary render directory
       ansible.builtin.file:
         path: "{{ proxmox_automatic_test_render_dir.path }}"
