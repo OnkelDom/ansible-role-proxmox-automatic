@@ -10,8 +10,7 @@
             item.size | string,
             (',discard=' + (item.pve_options | default({})).discard)
               if (item.pve_options | default({})).discard is defined else '',
-            (',iothread=' + ((item.pve_options | default({})).iothread | string))
-              if (item.pve_options | default({})).iothread is defined else '',
+            ',iothread=' + (((item.pve_options | default({})).iothread | default(1)) | string),
             (',cache=' + (item.pve_options | default({})).cache)
               if (item.pve_options | default({})).cache is defined else '',
             (',backup=' + ((item.pve_options | default({})).backup | string))
