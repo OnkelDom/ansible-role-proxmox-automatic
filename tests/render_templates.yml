@@ -320,14 +320,12 @@
     - name: Assert Debian preseed additional disk content
       ansible.builtin.assert:
         that:
-          - "'/sbin/wipefs -a /dev/vdb || true' in preseed_content"
-          - "'/sbin/parted -s /dev/vdb mklabel gpt' in preseed_content"
-          - "'in-target /sbin/pvcreate -ff -y /dev/vdb1' in preseed_content"
-          - "'in-target /sbin/vgcreate content /dev/vdb1' in preseed_content"
-          - "'in-target /sbin/lvcreate -L 96G -n prometheus content' in preseed_content"
-          - "'in-target /sbin/lvcreate -L 4G -n alertmanager content' in preseed_content"
-          - "'/dev/content/prometheus /var/lib/prometheus xfs defaults 0 2' in preseed_content"
-          - "'in-target mount -a || true' in preseed_content"
+          - "'d-i partman-auto/disk string /dev/vda /dev/vdb' in preseed_content"
+          - "'method{ lvm } device{ /dev/vdb } vg_name{ content }' in preseed_content"
+          - "'$lvmok{ } in_vg{ content } lv_name{ prometheus } method{ format } format{ } use_filesystem{ } filesystem{ xfs } mountpoint{ /var/lib/prometheus }' in preseed_content"
+          - "'$lvmok{ } in_vg{ content } lv_name{ alertmanager } method{ format } format{ } use_filesystem{ } filesystem{ xfs } mountpoint{ /var/lib/alertmanager }' in preseed_content"
+          - "'/sbin/wipefs -a /dev/vdb || true' not in preseed_content"
+          - "'in-target /sbin/pvcreate -ff -y /dev/vdb1' not in preseed_content"
       vars:
         preseed_content: "{{ proxmox_automatic_preseed_extra_disk_rendered.content | b64decode }}"
 

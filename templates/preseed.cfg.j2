@@ -6,6 +6,7 @@
 {% set bootable_storage = proxmox_automatic_storage_config | selectattr('bootloader', 'defined') | selectattr('bootloader') | list %}
 {% set primary_storage = bootable_storage[0] if bootable_storage | length > 0 else (proxmox_automatic_storage_config[0] if proxmox_automatic_storage_config | length > 0 else {}) %}
 {% set primary_disk = primary_storage.disk if primary_storage is mapping and primary_storage.disk is defined else '' %}
+{% set all_storage_disks = proxmox_automatic_storage_config | selectattr('disk', 'defined') | map(attribute='disk') | list %}
 {% set additional_storages = proxmox_automatic_storage_config | rejectattr('disk', 'equalto', primary_disk) | selectattr('disk', 'defined') | selectattr('vg', 'defined') | list %}
 {% set merged_users = proxmox_automatic_users_merged | default(proxmox_automatic_users) %}
 {% set primary_user = merged_users[0] if merged_users | length > 0 else {} %}
@@ -145,7 +146,7 @@ d-i passwd/make-user boolean false
 # DISK / LVM
 ###############################################################################
 {% if primary_storage %}
-d-i partman-auto/disk string /dev/{{ primary_storage.disk }}
+d-i partman-auto/disk string {% for disk in all_storage_disks %}/dev/{{ disk }}{% if not loop.last %} {% endif %}{% endfor %}
 d-i partman-auto/method string lvm
 d-i partman-lvm/device_remove_lvm boolean true
 d-i partman-md/device_remove_md boolean true
@@ -180,6 +181,24 @@ d-i partman-auto/expert_recipe string                         \
               {{ lv_recipe_min_size }} {{ lv_recipe_priority_size }} {{ lv_recipe_max_size }} {{ lv.fstype | default('ext4') if lv.mount != 'swap' else 'linux-swap' }} \
                       $lvmok{ } in_vg{ {{ vg.name | default('system') }} } lv_name{ {{ lv.name }} } {% if lv.mount == 'swap' %}method{ swap } format{ }{% else %}method{ format } format{ } use_filesystem{ } filesystem{ {{ lv.fstype | default('ext4') }} } mountpoint{ {{ lv.mount }} }{% endif %} \
               .                                               \
+{%   endfor %}
+{%   for storage in additional_storages %}
+{%     for storage_vg in storage.vg | default([]) %}
+              1 100% 100% lvm                                  \
+                      $primary{ } method{ lvm } device{ /dev/{{ storage.disk }} } vg_name{ {{ storage_vg.name }} } \
+              .                                               \
+{%       for lv in storage_vg.lv | rejectattr('grow', 'defined') | list + (storage_vg.lv | selectattr('grow', 'defined') | rejectattr('grow', 'equalto', true) | list) %}
+{%         set lv_recipe_size = ((((lv.size | int) * 1024 * 1024) + 999999) // 1000000) %}
+              {{ lv_recipe_size }} {{ lv_recipe_size }} {{ lv_recipe_size }} {{ lv.fstype | default('ext4') if lv.mount != 'swap' else 'linux-swap' }} \
+                      $lvmok{ } in_vg{ {{ storage_vg.name }} } lv_name{ {{ lv.name }} } {% if lv.mount == 'swap' %}method{ swap } format{ }{% else %}method{ format } format{ } use_filesystem{ } filesystem{ {{ lv.fstype | default('ext4') }} } mountpoint{ {{ lv.mount }} }{% endif %} \
+              .                                               \
+{%       endfor %}
+{%       for lv in storage_vg.lv | selectattr('grow', 'defined') | selectattr('grow', 'equalto', true) | list %}
+              1 100% 100% {{ lv.fstype | default('ext4') if lv.mount != 'swap' else 'linux-swap' }} \
+                      $lvmok{ } in_vg{ {{ storage_vg.name }} } lv_name{ {{ lv.name }} } {% if lv.mount == 'swap' %}method{ swap } format{ }{% else %}method{ format } format{ } use_filesystem{ } filesystem{ {{ lv.fstype | default('ext4') }} } mountpoint{ {{ lv.mount }} }{% endif %} \
+              .                                               \
+{%       endfor %}
+{%     endfor %}
 {%   endfor %}
 {% endif %}
 d-i partman-partitioning/confirm_write_new_label boolean true
@@ -283,42 +302,6 @@ d-i preseed/late_command string \
     printf '\nauto {{ device }}\niface {{ device }} inet static\n    address {{ network_ip }}\n    netmask {{ network_netmask }}\n{% if network_gateway %}    gateway {{ network_gateway }}\n{% endif %}    dns-nameservers {{ proxmox_automatic_dns_servers | join(' ') }}\n' >> /target/etc/network/interfaces; \
 {%   endfor %}
 {% endif %}
-{% for storage in additional_storages %}
-{%   set pv_suffix = 'p1' if storage.disk.startswith('nvme') or storage.disk.startswith('mmcblk') else '1' %}
-{%   set pv_device = '/dev/' ~ storage.disk ~ pv_suffix %}
-    /sbin/wipefs -a /dev/{{ storage.disk }} || true; \
-    /sbin/parted -s /dev/{{ storage.disk }} mklabel gpt; \
-    /sbin/parted -s -a optimal /dev/{{ storage.disk }} mkpart primary 1MiB 100%; \
-    /sbin/parted -s /dev/{{ storage.disk }} set 1 lvm on; \
-    /bin/udevadm settle; \
-{%   for vg in storage.vg %}
-    in-target /sbin/pvcreate -ff -y {{ pv_device }}; \
-    in-target /sbin/vgcreate {{ vg.name }} {{ pv_device }}; \
-{%     for lv in vg.lv | rejectattr('grow', 'defined') | list + (vg.lv | selectattr('grow', 'defined') | rejectattr('grow', 'equalto', true) | list) %}
-{%       set lv_size = lv.size | string %}
-    in-target /sbin/lvcreate -L {{ lv_size }}{% if lv_size is match('^[0-9]+$') %}G{% endif %} -n {{ lv.name }} {{ vg.name }}; \
-{%     endfor %}
-{%     for lv in vg.lv | selectattr('grow', 'defined') | selectattr('grow', 'equalto', true) | list %}
-    in-target /sbin/lvcreate -l 100%FREE -n {{ lv.name }} {{ vg.name }}; \
-{%     endfor %}
-{%     for lv in vg.lv %}
-{%       if lv.mount == 'swap' %}
-    in-target /sbin/mkswap /dev/{{ vg.name }}/{{ lv.name }}; \
-    printf '%s\n' '/dev/{{ vg.name }}/{{ lv.name }} none swap sw 0 0' >> /target/etc/fstab; \
-{%       else %}
-{%         if lv.fstype | default('xfs') == 'xfs' %}
-    in-target /sbin/mkfs.xfs -f /dev/{{ vg.name }}/{{ lv.name }}; \
-{%         elif lv.fstype | default('ext4') == 'ext4' %}
-    in-target /sbin/mkfs.ext4 -F /dev/{{ vg.name }}/{{ lv.name }}; \
-{%         else %}
-    in-target /sbin/mkfs -t {{ lv.fstype | default('ext4') }} /dev/{{ vg.name }}/{{ lv.name }}; \
-{%         endif %}
-    in-target mkdir -p {{ lv.mount }}; \
-    printf '%s\n' '/dev/{{ vg.name }}/{{ lv.name }} {{ lv.mount }} {{ lv.fstype | default("xfs") }} defaults 0 2' >> /target/etc/fstab; \
-{%       endif %}
-{%     endfor %}
-{%   endfor %}
-{% endfor %}
     printf '%s\n' '{{ ansible_host.split(".")[0] }}' > /target/etc/hostname; \
     printf '127.0.0.1 localhost\n::1 localhost\n' > /target/etc/hosts; \
 {% if primary_network %}
@@ -333,7 +316,6 @@ d-i preseed/late_command string \
     in-target /bin/sh -c 'DEBIAN_FRONTEND=noninteractive apt-get -y purge intel-microcode iucode-tool amd64-microcode || true'; \
     in-target update-initramfs -u -k all; \
 {% endif %}
-    in-target mount -a || true; \
     in-target update-grub; \
 {% if proxmox_automatic_debian_disable_network_manager %}
     in-target systemctl disable NetworkManager || true; \
