@@ -148,6 +148,7 @@ d-i passwd/make-user boolean false
 {% if primary_storage %}
 d-i partman-auto/disk string {% for disk in all_storage_disks %}/dev/{{ disk }}{% if not loop.last %} {% endif %}{% endfor %}
 d-i partman-auto/method string lvm
+d-i partman-auto-lvm/guided_size string max
 d-i partman-lvm/device_remove_lvm boolean true
 d-i partman-md/device_remove_md boolean true
 d-i partman-lvm/confirm boolean true
@@ -155,6 +156,7 @@ d-i partman-lvm/confirm_nooverwrite boolean true
 {% if proxmox_automatic_debian_partition_recipe_override | length > 0 %}
 d-i partman-auto/expert_recipe string {{ proxmox_automatic_debian_partition_recipe_override }}
 {% else %}
+d-i partman-auto/choose_recipe select proxmox-auto
 d-i partman-auto/expert_recipe string                         \
       proxmox-auto ::                                        \
 {%   for partition in primary_storage.partitions | default([]) %}
