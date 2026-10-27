@@ -65,7 +65,7 @@
                 mount: swap
                 size: 2048
                 fstype: swap
-    proxmox_automatic_users_merged:
+    proxmox_automatic_users:
       - name: "litsadmin"
         fullname: "LITS Admin"
         gecos: "LITS Admin"
@@ -160,7 +160,7 @@
                     mount: swap
                     size: 2048
                     fstype: swap
-        proxmox_automatic_users_merged:
+        proxmox_automatic_users:
           - name: "litsadmin"
             fullname: "LITS Admin"
             gecos: "LITS Admin"
@@ -194,12 +194,15 @@
         proxmox_automatic_packages_effective: "{{ proxmox_automatic_packages_default_rocky_kickstart }}"
 
     - name: Render Rocky kickstart template
+      vars:
+        _proxmox_input_names: "{{ query('ansible.builtin.varnames', '^proxmox_') + ['ansible_host', 'inventory_hostname'] }}"
+        _proxmox_config: >-
+          {{ dict(_proxmox_input_names | zip(query('ansible.builtin.vars', *_proxmox_input_names, default=''))) | combine({'proxmox_automatic_installer_backend': 'rocky_kickstart'}) |
+             degitag.proxmox.normalize_config(false) }}
       ansible.builtin.template:
         src: "{{ [playbook_dir, '..', 'templates', 'kickstart.cfg.j2'] | path_join | realpath }}"
         dest: "{{ proxmox_automatic_test_render_dir.path }}/kickstart.cfg"
         mode: "0644"
-      vars:
-        template_render_time: "test"
 
     - name: Read Rocky kickstart file
       ansible.builtin.slurp:
@@ -224,12 +227,15 @@
         proxmox_automatic_packages_effective: "{{ proxmox_automatic_debian_packages_default }}"
 
     - name: Render Debian preseed template
+      vars:
+        _proxmox_input_names: "{{ query('ansible.builtin.varnames', '^proxmox_') + ['ansible_host', 'inventory_hostname'] }}"
+        _proxmox_config: >-
+          {{ dict(_proxmox_input_names | zip(query('ansible.builtin.vars', *_proxmox_input_names, default=''))) | combine({'proxmox_automatic_installer_backend': 'debian13_preseed'}) |
+             degitag.proxmox.normalize_config(false) }}
       ansible.builtin.template:
         src: "{{ [playbook_dir, '..', 'templates', 'preseed.cfg.j2'] | path_join | realpath }}"
         dest: "{{ proxmox_automatic_test_render_dir.path }}/preseed.cfg"
         mode: "0644"
-      vars:
-        template_render_time: "test"
 
     - name: Read Debian preseed file
       ansible.builtin.slurp:
@@ -242,6 +248,8 @@
           - "'d-i debian-installer/locale string en_US.UTF-8' in preseed_content"
           - "'d-i mirror/http/hostname string deb.debian.org' in preseed_content"
           - "'d-i partman-auto/disk string /dev/vda' in preseed_content"
+          - "preseed_content is search('(?m)^d-i partman-auto/disk string /dev/vda$')"
+          - "preseed_content is search('(?m)^d-i partman-auto/method string lvm$')"
           - "'d-i preseed/late_command string' in preseed_content"
           - "'apt-get -y purge intel-microcode iucode-tool amd64-microcode' in preseed_content"
           - "'in-target update-initramfs -u -k all;' in preseed_content"
@@ -305,12 +313,15 @@
                     fstype: xfs
 
     - name: Render Debian preseed template with additional disk
+      vars:
+        _proxmox_input_names: "{{ query('ansible.builtin.varnames', '^proxmox_') + ['ansible_host', 'inventory_hostname'] }}"
+        _proxmox_config: >-
+          {{ dict(_proxmox_input_names | zip(query('ansible.builtin.vars', *_proxmox_input_names, default=''))) | combine({'proxmox_automatic_installer_backend': 'debian13_preseed'}) |
+             degitag.proxmox.normalize_config(false) }}
       ansible.builtin.template:
         src: "{{ [playbook_dir, '..', 'templates', 'preseed.cfg.j2'] | path_join | realpath }}"
         dest: "{{ proxmox_automatic_test_render_dir.path }}/preseed-extra-disk.cfg"
         mode: "0644"
-      vars:
-        template_render_time: "test"
 
     - name: Read Debian preseed extra disk file
       ansible.builtin.slurp:
@@ -374,7 +385,7 @@
                 size: 8192
                 fstype: xfs
     proxmox_automatic_networks: []
-    proxmox_automatic_users_merged:
+    proxmox_automatic_users:
       - name: admin
         gecos: Admin
         password: "$6$example"
@@ -421,7 +432,7 @@
                     size: 8192
                     fstype: xfs
         proxmox_automatic_networks: []
-        proxmox_automatic_users_merged:
+        proxmox_automatic_users:
           - name: admin
             gecos: Admin
             password: "$6$example"
@@ -430,12 +441,15 @@
             ssh_key: "ssh-ed25519 AAAA dhcp"
 
     - name: Render Rocky DHCP kickstart template
+      vars:
+        _proxmox_input_names: "{{ query('ansible.builtin.varnames', '^proxmox_') + ['ansible_host', 'inventory_hostname'] }}"
+        _proxmox_config: >-
+          {{ dict(_proxmox_input_names | zip(query('ansible.builtin.vars', *_proxmox_input_names, default=''))) | combine({'proxmox_automatic_installer_backend': 'rocky_kickstart'}) |
+             degitag.proxmox.normalize_config(false) }}
       ansible.builtin.template:
         src: "{{ [playbook_dir, '..', 'templates', 'kickstart.cfg.j2'] | path_join | realpath }}"
         dest: "{{ proxmox_automatic_test_render_dir.path }}/kickstart-dhcp.cfg"
         mode: "0644"
-      vars:
-        template_render_time: "test"
 
     - name: Read Rocky DHCP kickstart file
       ansible.builtin.slurp:
@@ -501,7 +515,7 @@
         ip: "192.0.2.21"
         netmask: "255.255.255.0"
         gateway: "192.0.2.1"
-    proxmox_automatic_users_merged:
+    proxmox_automatic_users:
       - name: admin
         gecos: Admin
         password: "$6$example"
@@ -559,7 +573,7 @@
             ip: "192.0.2.21"
             netmask: "255.255.255.0"
             gateway: "192.0.2.1"
-        proxmox_automatic_users_merged:
+        proxmox_automatic_users:
           - name: admin
             gecos: Admin
             password: "$6$example"
@@ -568,12 +582,15 @@
             ssh_key: "ssh-ed25519 AAAA cdrom"
 
     - name: Render Rocky CDROM kickstart template
+      vars:
+        _proxmox_input_names: "{{ query('ansible.builtin.varnames', '^proxmox_') + ['ansible_host', 'inventory_hostname'] }}"
+        _proxmox_config: >-
+          {{ dict(_proxmox_input_names | zip(query('ansible.builtin.vars', *_proxmox_input_names, default=''))) | combine({'proxmox_automatic_installer_backend': 'rocky_kickstart'}) |
+             degitag.proxmox.normalize_config(false) }}
       ansible.builtin.template:
         src: "{{ [playbook_dir, '..', 'templates', 'kickstart.cfg.j2'] | path_join | realpath }}"
         dest: "{{ proxmox_automatic_test_render_dir.path }}/kickstart-cdrom.cfg"
         mode: "0644"
-      vars:
-        template_render_time: "test"
 
     - name: Read Rocky CDROM kickstart file
       ansible.builtin.slurp:
@@ -615,7 +632,7 @@
         bootloader: true
         partitions: []
         vg: []
-    proxmox_automatic_users_merged:
+    proxmox_automatic_users:
       - name: "dbadmin"
         fullname: "DB Admin"
         password: "$6$override"
@@ -651,7 +668,7 @@
             bootloader: true
             partitions: []
             vg: []
-        proxmox_automatic_users_merged:
+        proxmox_automatic_users:
           - name: "dbadmin"
             fullname: "DB Admin"
             password: "$6$override"
@@ -668,12 +685,15 @@
           - "in-target touch /root/preseed-extra-test"
 
     - name: Render Debian override preseed template
+      vars:
+        _proxmox_input_names: "{{ query('ansible.builtin.varnames', '^proxmox_') + ['ansible_host', 'inventory_hostname'] }}"
+        _proxmox_config: >-
+          {{ dict(_proxmox_input_names | zip(query('ansible.builtin.vars', *_proxmox_input_names, default=''))) | combine({'proxmox_automatic_installer_backend': 'debian13_preseed'}) |
+             degitag.proxmox.normalize_config(false) }}
       ansible.builtin.template:
         src: "{{ [playbook_dir, '..', 'templates', 'preseed.cfg.j2'] | path_join | realpath }}"
         dest: "{{ proxmox_automatic_test_render_dir.path }}/preseed-override.cfg"
         mode: "0644"
-      vars:
-        template_render_time: "test"
 
     - name: Read Debian override preseed file
       ansible.builtin.slurp:
@@ -756,7 +776,7 @@
         vlanid: 7
         ip: "10.30.70.31"
         netmask: "255.255.255.0"
-    proxmox_automatic_users_merged:
+    proxmox_automatic_users:
       - name: "litsadmin"
         fullname: "LITS Admin"
         password: "Example123!"
@@ -830,7 +850,7 @@
             vlanid: 7
             ip: "10.30.70.31"
             netmask: "255.255.255.0"
-        proxmox_automatic_users_merged:
+        proxmox_automatic_users:
           - name: "litsadmin"
             fullname: "LITS Admin"
             password: "Example123!"
@@ -841,12 +861,15 @@
             sudo_nopasswd: true
 
     - name: Render Debian CDROM multi-NIC preseed template
+      vars:
+        _proxmox_input_names: "{{ query('ansible.builtin.varnames', '^proxmox_') + ['ansible_host', 'inventory_hostname'] }}"
+        _proxmox_config: >-
+          {{ dict(_proxmox_input_names | zip(query('ansible.builtin.vars', *_proxmox_input_names, default=''))) | combine({'proxmox_automatic_installer_backend': 'debian13_preseed'}) |
+             degitag.proxmox.normalize_config(false) }}
       ansible.builtin.template:
         src: "{{ [playbook_dir, '..', 'templates', 'preseed.cfg.j2'] | path_join | realpath }}"
         dest: "{{ proxmox_automatic_test_render_dir.path }}/preseed-cdrom-multinic.cfg"
         mode: "0644"
-      vars:
-        template_render_time: "test"
 
     - name: Read Debian CDROM multi-NIC preseed file
       ansible.builtin.slurp:
@@ -929,7 +952,7 @@
         ip: "192.0.2.15"
         netmask: "255.255.255.0"
         gateway: "192.0.2.1"
-    proxmox_automatic_users_merged:
+    proxmox_automatic_users:
       - name: "litsadmin"
         fullname: "LITS Admin"
         password: "Example123!"
@@ -999,7 +1022,7 @@
             ip: "192.0.2.15"
             netmask: "255.255.255.0"
             gateway: "192.0.2.1"
-        proxmox_automatic_users_merged:
+        proxmox_automatic_users:
           - name: "litsadmin"
             fullname: "LITS Admin"
             password: "Example123!"
@@ -1010,12 +1033,15 @@
             sudo_nopasswd: true
 
     - name: Render Debian grow-root preseed template
+      vars:
+        _proxmox_input_names: "{{ query('ansible.builtin.varnames', '^proxmox_') + ['ansible_host', 'inventory_hostname'] }}"
+        _proxmox_config: >-
+          {{ dict(_proxmox_input_names | zip(query('ansible.builtin.vars', *_proxmox_input_names, default=''))) | combine({'proxmox_automatic_installer_backend': 'debian13_preseed'}) |
+             degitag.proxmox.normalize_config(false) }}
       ansible.builtin.template:
         src: "{{ [playbook_dir, '..', 'templates', 'preseed.cfg.j2'] | path_join | realpath }}"
         dest: "{{ proxmox_automatic_test_render_dir.path }}/preseed-grow-root.cfg"
         mode: "0644"
-      vars:
-        template_render_time: "test"
 
     - name: Read Debian grow-root preseed file
       ansible.builtin.slurp:
@@ -1028,7 +1054,8 @@
           - "'1074 1074 1074 fat32' in preseed_content"
           - "'1074 1074 1074 ext4' in preseed_content"
           - "'1074 100% 100% lvm' in preseed_content"
-          - "'11809 11809 11809 xfs' in preseed_content"
+          - "'1074 10000 -1 xfs' in preseed_content"
+          - "preseed_content.index('lv_name{ swap }') < preseed_content.index('lv_name{ root }')"
           - "'4295 4295 4295 xfs' in preseed_content"
           - "'2148 2148 2148 linux-swap' in preseed_content"
       vars:

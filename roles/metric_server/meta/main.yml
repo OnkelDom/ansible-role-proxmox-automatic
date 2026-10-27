@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  author: Lenmail Maintainers
+  description: Native PVE 9 OpenTelemetry export through the cluster API
+  license: MIT
+  min_ansible_version: '2.19'
+  platforms:
+    - name: Debian
+      versions: [trixie]
+dependencies: []

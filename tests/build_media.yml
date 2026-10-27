@@ -53,7 +53,7 @@
                 mount: swap
                 size: 2048
                 fstype: swap
-    proxmox_automatic_users_merged:
+    proxmox_automatic_users:
       - name: "litsadmin"
         fullname: "LITS Admin"
         gecos: "LITS Admin"
@@ -80,68 +80,16 @@
         - "xorriso --version"
       changed_when: false
 
-    - name: Discover isohdpfx fixture
-      ansible.builtin.shell: |
-        set -euo pipefail
-        paths=()
-        for candidate in \
-          /usr/share/syslinux \
-          /usr/lib/syslinux \
-          /usr/lib/ISOLINUX \
-          /opt/homebrew \
-          /usr/local; do
-          if [ -e "$candidate" ]; then
-            paths+=("$candidate")
-          fi
-        done
-        find "${paths[@]}" -type f -name 'isohdpfx.bin' | head -n 1
-      args:
-        executable: /bin/bash
-      register: proxmox_automatic_syslinux_isohdpfx
-      changed_when: false
-
-    - name: Discover isolinux binary fixture
-      ansible.builtin.shell: |
-        set -euo pipefail
-        paths=()
-        for candidate in \
-          /usr/share/syslinux \
-          /usr/lib/syslinux \
-          /usr/lib/ISOLINUX \
-          /opt/homebrew \
-          /usr/local; do
-          if [ -e "$candidate" ]; then
-            paths+=("$candidate")
-          fi
-        done
-        find "${paths[@]}" -type f -name 'isolinux.bin' | head -n 1
-      args:
-        executable: /bin/bash
-      register: proxmox_automatic_syslinux_isolinux_bin
-      changed_when: false
-
-    - name: Persist syslinux fixture paths
-      ansible.builtin.set_fact:
-        proxmox_automatic_fixture_isohdpfx: "{{ proxmox_automatic_syslinux_isohdpfx.stdout | trim }}"
-        proxmox_automatic_fixture_isolinux_bin: "{{ proxmox_automatic_syslinux_isolinux_bin.stdout | trim }}"
-
-    - name: Assert syslinux fixture files are available
-      ansible.builtin.assert:
-        that:
-          - proxmox_automatic_fixture_isohdpfx | length > 0
-          - proxmox_automatic_fixture_isolinux_bin | length > 0
-        fail_msg: >-
-          Missing syslinux fixture files. Install xorriso, isolinux and syslinux on the controller.
-
     - name: Create test workspace
       ansible.builtin.tempfile:
         state: directory
-        suffix: proxmox-automatic-media-tests
+        suffix: "proxmox media tests"
       register: proxmox_automatic_test_workspace
 
     - name: Set workspace paths
       ansible.builtin.set_fact:
         proxmox_automatic_files_dir: "{{ proxmox_automatic_test_workspace.path }}/files"
+        proxmox_automatic_skip_iso_upload: true
         proxmox_automatic_iso_dir: "{{ proxmox_automatic_test_workspace.path }}/iso"
         proxmox_automatic_iso_build_dir: "{{ proxmox_automatic_test_workspace.path }}/build"
 
@@ -156,6 +104,16 @@
       vars:
         proxmox_automatic_skip_iso_upload: true
 
+    - name: Re-run unchanged Rocky media build
+      ansible.builtin.include_role:
+        name: proxmox_automatic
+        tasks_from: create_kickstart.yml
+
+    - name: Assert Rocky media cache is reused
+      ansible.builtin.assert:
+        that:
+          - not _proxmox_media_rebuild
+
     - name: Assert Rocky media artifacts exist
       ansible.builtin.stat:
         path: "{{ item }}"
@@ -169,6 +127,22 @@
         that:
           - proxmox_automatic_rocky_artifacts.results | map(attribute='stat.exists') | min
 
+    - name: Corrupt only the isolated Rocky artifact to exercise cache integrity checks
+      ansible.builtin.copy:
+        content: deliberately-corrupted-fixture
+        dest: "{{ proxmox_automatic_iso_dir }}/ks-{{ ansible_host }}.iso"
+        mode: "0600"
+
+    - name: Rebuild a corrupted local artifact
+      ansible.builtin.include_role:
+        name: proxmox_automatic
+        tasks_from: create_kickstart.yml
+
+    - name: Assert corruption triggered a rebuild
+      ansible.builtin.assert:
+        that:
+          - _proxmox_media_rebuild
+
     - name: Create Debian fixture source tree
       ansible.builtin.file:
         path: "{{ item }}"
@@ -179,12 +153,16 @@
         - "{{ proxmox_automatic_test_workspace.path }}/fixture-src/install.amd"
         - "{{ proxmox_automatic_test_workspace.path }}/fixture-src/boot/grub"
 
-    - name: Copy fixture isolinux binary
-      ansible.builtin.copy:
-        src: "{{ proxmox_automatic_fixture_isolinux_bin }}"
-        dest: "{{ proxmox_automatic_test_workspace.path }}/fixture-src/isolinux/isolinux.bin"
-        mode: "0644"
-        remote_src: true
+    # Structural fixture only: BIOS stub, kernel and initrd are deliberately not bootable.
+    - name: Create isolated fixture BIOS boot image
+      ansible.builtin.command:
+        argv:
+          - dd
+          - if=/dev/zero
+          - "of={{ proxmox_automatic_test_workspace.path }}/fixture-src/isolinux/isolinux.bin"
+          - bs=2048
+          - count=1
+      changed_when: true
 
     - name: Create Debian fixture boot files
       ansible.builtin.copy:
@@ -216,7 +194,7 @@
 
     - name: Create Debian fixture EFI image
       ansible.builtin.command:
-        cmd: "dd if=/dev/zero of={{ proxmox_automatic_test_workspace.path }}/fixture-src/boot/grub/efi.img bs=1024 count=1440"
+        cmd: "dd if=/dev/zero of={{ proxmox_automatic_test_workspace.path | quote }}/fixture-src/boot/grub/efi.img bs=1024 count=1440"
       changed_when: true
 
     - name: Build Debian fixture source ISO
@@ -226,7 +204,6 @@
           -r -J -joliet-long -l \
           -V TEST_DEBIAN_FIXTURE \
           -o "{{ proxmox_automatic_test_workspace.path }}/fixture-src/debian-source.iso" \
-          -isohybrid-mbr "{{ proxmox_automatic_fixture_isohdpfx }}" \
           -c isolinux/boot.cat \
           -b isolinux/isolinux.bin \
           -no-emul-boot \
@@ -242,7 +219,7 @@
 
     - name: Read Debian fixture source ISO label
       ansible.builtin.command:
-        cmd: "xorriso -indev {{ proxmox_automatic_test_workspace.path }}/fixture-src/debian-source.iso -pvd_info"
+        cmd: "xorriso -indev {{ proxmox_automatic_test_workspace.path | quote }}/fixture-src/debian-source.iso -pvd_info"
       register: proxmox_automatic_debian_fixture_pvd_info
       changed_when: false
 
@@ -253,12 +230,26 @@
         proxmox_automatic_source_iso_name: "debian-13.0.0-amd64-netinst"
         proxmox_automatic_generated_iso_name: "debian13-test-{{ ansible_host }}"
 
+    - name: Select Debian backend for compatibility adapter
+      ansible.builtin.set_fact:
+        proxmox_automatic_installer_backend: debian13_preseed
+
     - name: Run Debian media generation role tasks
       ansible.builtin.include_role:
         name: proxmox_automatic
         tasks_from: create_preseed.yml
       vars:
         proxmox_automatic_skip_iso_upload: true
+
+    - name: Re-run unchanged Debian media build
+      ansible.builtin.include_role:
+        name: proxmox_automatic
+        tasks_from: create_preseed.yml
+
+    - name: Assert Debian media cache is reused
+      ansible.builtin.assert:
+        that:
+          - not _proxmox_media_rebuild
 
     - name: Assert Debian media artifacts exist
       ansible.builtin.stat:
@@ -275,7 +266,7 @@
 
     - name: Read remastered Debian ISO label
       ansible.builtin.command:
-        cmd: "xorriso -indev {{ proxmox_automatic_iso_dir }}/debian13-test-{{ ansible_host }}.iso -pvd_info"
+        cmd: "xorriso -indev {{ proxmox_automatic_iso_dir | quote }}/debian13-test-{{ ansible_host }}.iso -pvd_info"
       register: proxmox_automatic_debian_remaster_pvd_info
       changed_when: false
 
@@ -309,8 +300,8 @@
       ansible.builtin.command:
         cmd: >-
           xorriso -osirrox on
-          -indev {{ proxmox_automatic_iso_dir }}/debian13-test-{{ ansible_host }}.iso
-          -extract / {{ proxmox_automatic_test_workspace.path }}/debian-remastered-root
+          -indev {{ proxmox_automatic_iso_dir | quote }}/debian13-test-{{ ansible_host }}.iso
+          -extract / {{ proxmox_automatic_test_workspace.path | quote }}/debian-remastered-root
       changed_when: false
 
     - name: Assert remastered Debian ISO extracted preseed exists
@@ -357,6 +348,15 @@
           {{
             (proxmox_automatic_debian_boot_configs.results[2].content | b64decode)
           }}
+
+    - name: Make extracted read-only ISO fixture removable
+      ansible.builtin.command:
+        argv:
+          - chmod
+          - -R
+          - u+w
+          - "{{ proxmox_automatic_test_workspace.path }}"
+      changed_when: true
 
     - name: Remove test workspace
       ansible.builtin.file:

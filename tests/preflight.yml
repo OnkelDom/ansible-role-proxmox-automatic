@@ -1,0 +1,50 @@
+---
+# Run only with --tags proxmox_validate: no API target is reachable or required.
+- name: Exercise production deployment input validation without API access
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    proxmox_api:
+      host: pve.example.invalid
+      token_id: automation@pve!test
+      token_secret: test-only-secret
+    proxmox_vm:
+      name: preflight.example.invalid
+      node: pve01
+      vmid: 3011
+      networks:
+        - name: net0
+          bridge: vmbr0
+          ip: 192.0.2.11
+          netmask: 255.255.255.0
+    proxmox_guest:
+      ssh_user: automation
+      users:
+        - name: automation
+          ssh_key: ssh-ed25519 TEST
+  roles:
+    - degitag.proxmox.deploy
+
+- name: Exercise legacy role entry point without API access
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_host: legacy.example.invalid
+    proxmox_automatic_api_host: pve.example.invalid
+    proxmox_automatic_api_user: automation@pve
+    proxmox_automatic_api_token_id: test
+    proxmox_automatic_api_token_secret: test-only-secret
+    proxmox_automatic_hypervisor: pve01
+    proxmox_automatic_vmid: 3012
+    proxmox_automatic_networks:
+      - name: net0
+        bridge: vmbr0
+        ip: 192.0.2.12
+        netmask: 255.255.255.0
+    proxmox_automatic_users:
+      - name: automation
+        ssh_key: ssh-ed25519 TEST
+  roles:
+    - proxmox_automatic

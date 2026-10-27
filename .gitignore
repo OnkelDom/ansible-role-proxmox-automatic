@@ -54,7 +54,6 @@ htmlcov/
 .nox/
 
 # Ansible Galaxy
-galaxy.yml
 
 # Generated files during role execution
 playbooks/kickstart-files/
@@ -86,3 +85,10 @@ Thumbs.db
 *.backup
 *~
 debian-13.3.0-amd64-netinst.iso
+
+.collections/
+.ci-roles/
+*.tar.gz
+
+.proxmox-firewall-backups/
+.e2e-live/

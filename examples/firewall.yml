@@ -1,0 +1,33 @@
+---
+- name: Maintain shared Proxmox policies without provisioning VMs
+  hosts: proxmox_clusters
+  gather_facts: false
+  vars:
+    proxmox_api:
+      host: "{{ lookup('ansible.builtin.env', 'PROXMOX_API_HOST') }}"
+      token_id: "{{ lookup('ansible.builtin.env', 'PROXMOX_API_TOKEN_ID') }}"
+      token_secret: "{{ lookup('ansible.builtin.env', 'PROXMOX_API_TOKEN_SECRET') }}"
+      validate_certs: true
+    proxmox_cluster_firewall:
+      ipsets:
+        - name: management
+          cidrs:
+            - cidr: 192.0.2.0/24
+      groups:
+        - name: management
+          rules:
+            - name: ssh
+              action: ACCEPT
+              source: +management
+              proto: tcp
+              dport: '22'
+        - name: webserver
+          rules:
+            - name: https
+              action: ACCEPT
+              proto: tcp
+              dport: '443'
+      # No change to host rules, global activation or default policies.
+      options: {}
+  roles:
+    - degitag.proxmox.cluster_resources

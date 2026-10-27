@@ -1,0 +1,60 @@
+---
+- name: Inspect competing guest firewall services before activation
+  ansible.builtin.service_facts:
+
+- name: Require an explicit migration or coexistence choice for existing firewalls
+  ansible.builtin.assert:
+    that:
+      - >-
+        (_proxmox_config.firewall.allow_other_firewalls | bool) or
+        ((ansible_facts.services[item] | default({})).state | default('stopped')) != 'running'
+    fail_msg: An existing firewall is active; migrate its policy or explicitly set allow_other_firewalls
+  loop: [firewalld.service, ufw.service, nftables.service]
+
+- name: Install nftables for explicitly enabled guest policy
+  ansible.builtin.package:
+    name: nftables
+    state: present
+    use: "{{ _proxmox_guest_facts.ansible_facts.ansible_pkg_mgr }}"
+
+- name: Write and validate the owned nftables table
+  ansible.builtin.template:
+    src: firewall.nft.j2
+    dest: /etc/lenmail-proxmox.nft
+    owner: root
+    group: root
+    mode: "0600"
+    validate: /usr/sbin/nft -c -f %s
+  register: _proxmox_guest_firewall_file
+
+- name: Install persistent firewall unit
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/lenmail-proxmox-firewall.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Lenmail Proxmox guest firewall
+      After=network-pre.target
+      Before=network.target
+      Wants=network-pre.target
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/sbin/nft -f /etc/lenmail-proxmox.nft
+      ExecReload=/usr/sbin/nft -f /etc/lenmail-proxmox.nft
+      [Install]
+      WantedBy=multi-user.target
+  register: _proxmox_guest_firewall_unit
+
+- name: Activate persistent guest firewall
+  ansible.builtin.systemd_service:
+    name: lenmail-proxmox-firewall
+    enabled: true
+    daemon_reload: "{{ _proxmox_guest_firewall_unit.changed }}"
+    state: "{{ 'restarted' if _proxmox_guest_firewall_file.changed or _proxmox_guest_firewall_unit.changed else 'started' }}"
+
+- name: Verify a fresh SSH connection after guest firewall activation
+  ansible.builtin.wait_for_connection:
+    timeout: 60

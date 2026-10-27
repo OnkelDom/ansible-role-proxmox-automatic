@@ -1,0 +1,51 @@
+---
+- name: Hash rendered installer configuration
+  ansible.builtin.stat:
+    path: >-
+      {{ _proxmox_config.install.files_dir }}/{{ 'ks' if _proxmox_config.install.backend == 'rocky_kickstart'
+      else 'preseed' }}-{{ _proxmox_config.vm.name }}.cfg
+    checksum_algorithm: sha256
+  register: _proxmox_media_config_stat
+  delegate_to: localhost
+
+- name: Hash source ISO for Debian remastering
+  ansible.builtin.stat:
+    path: "{{ _proxmox_media_backend_source_iso_path }}"
+    checksum_algorithm: sha256
+  register: _proxmox_media_source_stat
+  delegate_to: localhost
+  when: _proxmox_config.install.backend == 'debian13_preseed'
+
+- name: Calculate media input fingerprint
+  ansible.builtin.set_fact:
+    _proxmox_media_fingerprint: >-
+      {{ {'config': _proxmox_media_config_stat.stat.checksum | default('pending'),
+          'source': (_proxmox_media_source_stat.stat | default({})).checksum | default('config-cd'),
+          'builder': lookup('ansible.builtin.file', role_path ~ '/tasks/' ~
+            ('rocky.yml' if _proxmox_config.install.backend == 'rocky_kickstart' else 'debian.yml'))}
+         | to_json | hash('sha256') }}
+
+- name: Inspect existing installer artifact
+  ansible.builtin.stat:
+    path: "{{ _proxmox_config.install.iso_dir }}/{{ _proxmox_media_backend_generated_iso_name }}.iso"
+    checksum_algorithm: sha256
+  register: _proxmox_media_artifact_stat
+  delegate_to: localhost
+
+- name: Read previous input fingerprint
+  ansible.builtin.slurp:
+    src: "{{ _proxmox_config.install.iso_dir }}/{{ _proxmox_media_backend_generated_iso_name }}.manifest.json"
+  register: _proxmox_media_previous_fingerprint
+  failed_when: false
+  delegate_to: localhost
+
+- name: Decide whether installer media needs rebuilding
+  ansible.builtin.set_fact:
+    _proxmox_media_rebuild: >-
+      {{ not _proxmox_media_artifact_stat.stat.exists or
+         (_proxmox_media_manifest.input | default('')) != _proxmox_media_fingerprint or
+         (_proxmox_media_manifest.iso | default('')) != (_proxmox_media_artifact_stat.stat.checksum | default('missing')) }}
+  vars:
+    _proxmox_media_manifest: >-
+      {{ (_proxmox_media_previous_fingerprint.content | b64decode | from_json)
+         if _proxmox_media_previous_fingerprint.content is defined else {} }}

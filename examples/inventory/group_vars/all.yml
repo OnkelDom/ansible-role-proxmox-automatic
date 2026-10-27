@@ -2,12 +2,12 @@
 proxmox_automatic_api_host: "pve.example.com"
 proxmox_automatic_api_user: "svc_ansible_rw@pam"
 proxmox_automatic_api_password: "{{ vault_proxmox_automatic_api_password }}"
-proxmox_automatic_api_validate_certs: false
+proxmox_automatic_api_validate_certs: true
 
 proxmox_automatic_hypervisor: "pve"
 proxmox_automatic_pve_iso_storage: "local"
 proxmox_automatic_pve_vm_storage: "volumes"
-proxmox_automatic_pve_network_bridge: "vmbr1"
+proxmox_automatic_defaultbridge: "vmbr1"
 
 proxmox_automatic_install_dependencies: false
 proxmox_automatic_ha_enabled: true

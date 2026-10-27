@@ -1,0 +1,31 @@
+# Managed by degitag.proxmox. Only this table is owned by the collection.
+add table inet lenmail_proxmox
+flush table inet lenmail_proxmox
+table inet lenmail_proxmox {
+    chain input {
+        type filter hook input priority 0; policy {{ _proxmox_config.firewall.policy_in | lower }};
+        iifname "lo" accept
+        ct state established,related accept
+        ct state invalid drop
+        meta l4proto { icmp, ipv6-icmp } accept
+        udp sport 67 udp dport 68 accept
+        udp sport 547 udp dport 546 accept
+{% for cidr in _proxmox_config.firewall.management_sources %}
+        {{ 'ip6' if ':' in cidr else 'ip' }} saddr {{ cidr }} tcp dport {{ _proxmox_config.guest.port }} accept
+{% endfor %}
+{% for rule in _proxmox_config.firewall.guest_rules if rule.type | default('in') == 'in' and rule.state | default('present') == 'present' and rule.enable | default(true) %}
+        {% include 'rule.nft.j2' %}{{ '\n' }}
+{% endfor %}
+    }
+    chain output {
+        type filter hook output priority 0; policy {{ _proxmox_config.firewall.policy_out | lower }};
+        oifname "lo" accept
+        ct state established,related accept
+        meta l4proto { icmp, ipv6-icmp } accept
+        udp sport 68 udp dport 67 accept
+        udp sport 546 udp dport 547 accept
+{% for rule in _proxmox_config.firewall.guest_rules if rule.type | default('in') == 'out' and rule.state | default('present') == 'present' and rule.enable | default(true) %}
+        {% include 'rule.nft.j2' %}{{ '\n' }}
+{% endfor %}
+    }
+}

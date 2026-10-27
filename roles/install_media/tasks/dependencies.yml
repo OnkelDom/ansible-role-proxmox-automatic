@@ -1,0 +1,44 @@
+---
+- name: Read controller distribution without collecting environment variables
+  ansible.builtin.setup:
+    gather_subset:
+      - '!all'
+      - '!min'
+      - distribution
+  delegate_to: localhost
+  register: _proxmox_controller_distribution
+
+- name: Validate supported controller operating system
+  ansible.builtin.assert:
+    that:
+      - _proxmox_controller_distribution.ansible_facts.ansible_os_family in ['RedHat', 'Debian', 'Suse', 'Archlinux', 'Darwin']
+    fail_msg: Install xorriso and perl manually on this controller operating system
+
+- name: Refresh Debian controller package metadata
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+  delegate_to: localhost
+  when: _proxmox_controller_distribution.ansible_facts.ansible_os_family == 'Debian'
+
+- name: Install Linux controller ISO dependencies
+  ansible.builtin.package:
+    name: [xorriso, perl]
+    state: present
+  become: true
+  delegate_to: localhost
+  when: _proxmox_controller_distribution.ansible_facts.ansible_os_family != 'Darwin'
+
+- name: Install macOS controller ISO dependencies through existing Homebrew
+  community.general.homebrew:
+    name: [xorriso, perl]
+    state: present
+  delegate_to: localhost
+  when: _proxmox_controller_distribution.ansible_facts.ansible_os_family == 'Darwin'
+
+- name: Verify controller ISO tooling
+  ansible.builtin.command:
+    argv: [xorriso, --version]
+  changed_when: false
+  delegate_to: localhost

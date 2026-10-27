@@ -1,0 +1,42 @@
+---
+- name: Construct VM security group references and management exceptions
+  ansible.builtin.set_fact:
+    _proxmox_vm_firewall_rules: []
+
+- name: Add mandatory management access before restrictive policy
+  ansible.builtin.set_fact:
+    _proxmox_vm_firewall_rules: >-
+      {{ _proxmox_vm_firewall_rules + [{'name': 'management-' ~ ansible_loop.index0,
+          'type': 'in', 'action': 'ACCEPT', 'source': item,
+          'proto': 'tcp', 'dport': _proxmox_config.guest.port | string}] }}
+  loop: "{{ _proxmox_config.firewall.management_sources }}"
+  loop_control:
+    extended: true
+
+- name: Reference shared security groups in explicit order
+  ansible.builtin.set_fact:
+    _proxmox_vm_firewall_rules: >-
+      {{ _proxmox_vm_firewall_rules + [{'name': 'group-' ~ item, 'type': 'group', 'action': item}] }}
+  loop: "{{ _proxmox_config.firewall.groups }}"
+
+- name: Reconcile VM firewall policy
+  degitag.proxmox.firewall:
+    api: "{{ _proxmox_config.api }}"
+    node: "{{ _proxmox_vm_state.node | default(_proxmox_config.vm.node) }}"
+    vmid: "{{ _proxmox_config.vm.vmid }}"
+    config:
+      rules: "{{ _proxmox_vm_firewall_rules + _proxmox_config.firewall.rules }}"
+      options:
+        enable: true
+        policy_in: "{{ _proxmox_config.firewall.policy_in }}"
+        policy_out: "{{ _proxmox_config.firewall.policy_out }}"
+  delegate_to: localhost
+
+- name: Enable firewall on VM NICs while preserving current MACs and other options
+  degitag.proxmox.vm_lifecycle:
+    api: "{{ _proxmox_config.api }}"
+    vmid: "{{ _proxmox_config.vm.vmid }}"
+    name: "{{ _proxmox_config.vm.name }}"
+    node: "{{ _proxmox_config.vm.node }}"
+    operation: nic_firewall
+  delegate_to: localhost

@@ -1,0 +1,12 @@
+---
+- name: Install controller dependencies when requested
+  ansible.builtin.include_tasks: dependencies.yml
+  when: _proxmox_config.install.install_dependencies | bool
+
+- name: Build Rocky installer media
+  ansible.builtin.include_tasks: rocky.yml
+  when: _proxmox_config.install.backend == 'rocky_kickstart'
+
+- name: Build Debian installer media
+  ansible.builtin.include_tasks: debian.yml
+  when: _proxmox_config.install.backend == 'debian13_preseed'

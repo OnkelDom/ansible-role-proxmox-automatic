@@ -1,0 +1,7 @@
+---
+- name: Configure native PVE metrics
+  hosts: pve_cluster_representatives
+  gather_facts: true
+  become: true
+  roles:
+    - degitag.proxmox.metric_server

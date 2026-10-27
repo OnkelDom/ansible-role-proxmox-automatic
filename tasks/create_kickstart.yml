@@ -1,59 +1,10 @@
 ---
-- name: "Create kickstart dependencies"
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    mode: "0755"
-  loop:
-    - "{{ proxmox_automatic_files_dir }}"
-    - "{{ proxmox_automatic_iso_dir }}"
-  delegate_to: localhost
-  run_once: true
+- name: Normalize compatibility media input
+  ansible.builtin.include_role:
+    name: degitag.proxmox.deploy
+    tasks_from: normalize_media
 
-- name: "Create kickstart file"
-  ansible.builtin.template:
-    src: >-
-      {{
-        proxmox_automatic_kickstart_template
-        if proxmox_automatic_kickstart_template.startswith('/')
-        else (role_path | default(playbook_dir ~ '/..')) ~ '/templates/' ~ proxmox_automatic_kickstart_template
-      }}
-    dest: "{{ proxmox_automatic_files_dir }}/ks-{{ ansible_host }}.cfg"
-    mode: "0644"
-    force: true
-  delegate_to: localhost
-  vars:
-    template_render_time: "{{ now().strftime('%Y-%m-%d %H:%M:%S %Z') }}"
-
-- name: "Set Rocky ISO names"
-  ansible.builtin.set_fact:
-    proxmox_automatic_backend_source_iso_name: "{{ proxmox_automatic_source_iso_name }}"
-    proxmox_automatic_backend_generated_iso_name: >-
-      {{
-        proxmox_automatic_generated_iso_name
-        if proxmox_automatic_generated_iso_name | length > 0
-        else 'ks-' ~ ansible_host
-      }}
-
-- name: "Create ISO file"
-  ansible.builtin.command: >
-    xorriso -as mkisofs
-    -o {{ proxmox_automatic_iso_dir }}/{{ proxmox_automatic_backend_generated_iso_name }}.iso
-    -V {{ proxmox_automatic_backend_generated_iso_name | upper | regex_replace('[^A-Z0-9_]', '_') }}
-    -J -R
-    -graft-points ks.cfg={{ proxmox_automatic_files_dir }}/ks-{{ ansible_host }}.cfg
-  delegate_to: localhost
-  changed_when: true
-
-- name: "Upload Rocky ISO to Proxmox"
-  ansible.builtin.include_tasks: upload_generated_iso.yml
-  vars:
-    proxmox_automatic_upload_iso_path: >-
-      {{ proxmox_automatic_iso_dir }}/{{ proxmox_automatic_backend_generated_iso_name }}.iso
-    proxmox_automatic_upload_iso_name: "{{ proxmox_automatic_backend_generated_iso_name }}.iso"
-  when: not (proxmox_automatic_skip_iso_upload | bool)
-
-- name: "Set Rocky VM media layout"
-  ansible.builtin.set_fact:
-    proxmox_automatic_primary_cdrom_iso: "{{ proxmox_automatic_backend_source_iso_name }}"
-    proxmox_automatic_secondary_cdrom_iso: "{{ proxmox_automatic_backend_generated_iso_name }}"
+- name: Build installer media using the collection
+  ansible.builtin.include_role:
+    name: degitag.proxmox.install_media
+    tasks_from: rocky

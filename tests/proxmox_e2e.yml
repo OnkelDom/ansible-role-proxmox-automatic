@@ -133,7 +133,8 @@
             additional_ssh_keys: []
         proxmox_automatic_ha_enabled: true
         proxmox_automatic_ha_group_manage: true
-        proxmox_automatic_ha_group_auto: true
+        proxmox_automatic_ha_group_auto: false
+        proxmox_automatic_ha_group: lenmail-e2e
         proxmox_automatic_ha_group_comment: "Codex E2E shared HA rule"
         proxmox_automatic_ha_comment: "Codex E2E resource {{ item.inventory_name }}"
         proxmox_e2e_expected_root_g: "{{ item.expected_root_g }}"
@@ -232,7 +233,8 @@
             additional_ssh_keys: []
         proxmox_automatic_ha_enabled: true
         proxmox_automatic_ha_group_manage: true
-        proxmox_automatic_ha_group_auto: true
+        proxmox_automatic_ha_group_auto: false
+        proxmox_automatic_ha_group: lenmail-e2e
         proxmox_automatic_ha_group_comment: "Codex E2E shared HA rule"
         proxmox_automatic_ha_comment: "Codex E2E resource {{ inventory_hostname }}"
         proxmox_e2e_expected_root_g: "{{ proxmox_e2e_current.expected_root_g }}"
@@ -354,6 +356,6 @@
         ha_rule: >-
           {{
             proxmox_e2e_ha_rules.json.data
-            | selectattr('rule', 'equalto', 'ha-group-' ~ (hostvars[groups['proxmox_e2e'][0]].proxmox_automatic_hypervisor | regex_replace('\\..*$', '')))
+            | selectattr('rule', 'equalto', 'lenmail-e2e')
             | first
           }}

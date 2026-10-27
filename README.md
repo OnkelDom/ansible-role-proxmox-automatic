@@ -1,834 +1,400 @@
-# Ansible Role: proxmox_automatic
+# degitag.proxmox
 
-[![CI](https://github.com/lenmail/ansible-role-proxmox-automatic/workflows/CI/badge.svg)](https://github.com/lenmail/ansible-role-proxmox-automatic/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Ansible Galaxy](https://img.shields.io/badge/ansible--galaxy-proxmox__automatic-blue.svg)](https://galaxy.ansible.com/lenmail/proxmox_automatic)
-[![Ansible](https://img.shields.io/badge/ansible-2.14%2B-red.svg)](https://ansible.com)
-[![GitHub release](https://img.shields.io/github/release/lenmail/ansible-role-proxmox-automatic.svg)](https://github.com/lenmail/ansible-role-proxmox-automatic/releases)
+Ansible-Collection für unbeaufsichtigte Rocky-Linux- und Debian-Installationen auf Proxmox VE, zentrale Firewall-Regeln und optionale Gastkonfiguration. Der bisherige Rollenname `proxmox_automatic` bleibt als Kompatibilitätseinstieg erhalten.
 
-This role automatically creates virtual machines on a **Proxmox VE Cluster** with backend-specific unattended installer media. It currently supports **Rocky Linux via Kickstart** and **Debian 13 via Preseed**, generates the required ISO artifacts, uploads them to Proxmox, and starts VMs with complex storage and network configurations.
+**Firewall-Verwaltung ist enthalten:** gemeinsame Sicherheitsgruppen, Aliase und IP-Sets im Cluster, deren Zuweisung und eigene Regeln je VM sowie optional nftables im Gast. Die drei Ebenen werden unabhängig konfiguriert.
 
-For `rocky_kickstart`, the role only generates the second config CD. The primary Rocky/RHEL installer ISO must already be prepared to load `ks.cfg` from that second CD by boot parameter.
+## Wegweiser
 
-## 🚀 Features
+- [Funktionsumfang und Architektur](#funktionsumfang-und-architektur)
+- [Voraussetzungen](#voraussetzungen)
+- [Installation](#installation)
+- [Firewall konfigurieren](#firewall-konfigurieren)
+- [VM installieren](#vm-installieren)
+- [Betrieb vorhandener VMs](#betrieb-vorhandener-vms)
+- [Installationsmedien und Geheimnisse](#installationsmedien-und-geheimnisse)
+- [Migration und Abnahme](#migration-und-abnahme)
+- [Entwicklung und Tests](#entwicklung-und-tests)
+- [Weitere Dokumentation](#weitere-dokumentation)
 
-- **Automatic Dependency Installation**: Installs `xorriso` and `syslinux` on various distributions
-- **Hierarchical Configuration**: Defaults → group_vars → host_vars → Playbook variables
-- **Multi-OS Installer Backends**: `rocky_kickstart` and `debian13_preseed`
-- **Dynamic Storage Configuration**: Multi-disk support with LVM and flexible sizes
-- **Automatic Config Generation**: Individual Kickstart or Preseed files per VM
-- **ISO Management**: Rocky uses original ISO + config CD, Debian remasters a bootable installer ISO
-- **Install Source Modes**: Online mirrors or CD-only installation, controlled by variables
-- **Flexible User Configuration**: Hierarchical user management with SSH keys
-- **Multi-Network Support**: Multiple network interfaces with VLAN support
-- **Rocky Linux 9 Base Provisioning**: Minimal first-boot basis without additional shell customizations
-- **Debian 13 Ready**: Remastered ISO flow with embedded `preseed.cfg`
+## Funktionsumfang und Architektur
 
-## 📋 Requirements
+| Rolle | Aufgabe |
+|---|---|
+| `degitag.proxmox.deploy` | Vorprüfung, Installation, Verifikation und Abschluss koordinieren |
+| `degitag.proxmox.cluster_resources` | Zentrale Sicherheitsgruppen, Aliase, IP-Sets und explizite Cluster-Regeln unabhängig von VMs verwalten |
+| `degitag.proxmox.install_media` | Kickstart-Konfigurations-CD beziehungsweise remastertes Debian-ISO erzeugen und hochladen |
+| `degitag.proxmox.vm` | VM-Hardware erstellen, Installer starten und Bootreihenfolge steuern |
+| `degitag.proxmox.guest` | Installation prüfen, Bootstrap-Benutzer/Pakete/Sysctl verwalten und optional eine Gast-Firewall einrichten |
 
-### Proxmox VE
-- API user with VM management permissions
-- Storage for VMs and ISOs
+`deploy` verwendet interne Task-Einstiege für Pools, HA und VM-Firewall. Die Spezialrollen `install_media`, `vm` und `guest` erhalten dabei den normalisierten privaten Kontext `_proxmox_config`; für eigenständige Aufrufe zuerst `deploy`, `tasks_from: normalize_only`, verwenden. Medien-only-Normalisierung ist über `normalize_media` verfügbar.
 
-### Ansible Controller Dependencies
+Aus Sicht des Plattformbetriebs bleiben Patchmanagement, SMTP, Monitoring und allgemeine Server-Baselines in den dafür zuständigen Betriebssystemrollen. Die Gastrolle bildet bewusst keine zweite vollständige Server-Baseline.
 
-**Automatic installation (recommended):**
-```yaml
-proxmox_automatic_install_dependencies: true
-```
+Zusätzlich konfiguriert die eigenständige Rolle [`degitag.proxmox.metric_server`](roles/metric_server/README.md) einen nativen PVE-OTLP-Metrikexport. Sie läuft mit Root-Rechten auf genau einem repräsentativen PVE-Node je Cluster und wird vom VM-Deployment nicht automatisch aufgerufen.
 
-**Supported systems:**
-- Red Hat family (RHEL, Rocky, CentOS, Fedora)
-- Debian family (Debian, Ubuntu)
-- macOS (via Homebrew)
-- SUSE family (openSUSE, SLES)
-- Arch family (Arch, Manjaro)
+## Voraussetzungen
 
-### Collections
+- Controller: Python ab 3.11, ansible-core ab 2.19, `requests`, `xorriso` und für die Debian-Bootmenü-Anpassung `perl`.
+- Collections aus `collections/requirements.yml`; für die Community-Proxmox-Module zusätzlich `proxmoxer` im Python-Interpreter des Controllers.
+- Rocky-Backend: vorbereitetes Haupt-ISO auf Proxmox, das `ks.cfg` von der zweiten CD lädt. Die Collection baut die Konfigurations-CD.
+- Debian-Backend: lokales Debian-13-AMD64-ISO. Der Remaster übernimmt BIOS-/EFI-Bootmetadaten des Originals.
+- ISO- und VM-Storage, Bridge, API-Berechtigungen, DNS/Mirror-Erreichbarkeit und ein SSH-Schlüssel für den Bootstrap-Benutzer sowie eine geklärte SSH-Hostkey-Vertrauensstellung für neue Gäste.
+- Für Node-Affinity-HA-Regeln ein Proxmox mit `/cluster/ha/rules` (Proxmox VE 9). Der Zugriff wird nicht benötigt, wenn HA deaktiviert ist.
+- Firewall-Sicherheitsgruppen benötigen zentrale Änderungsrechte; für die Gruppe ist laut Proxmox-API `Sys.Modify` erforderlich. VM- und HA-Rechte separat begrenzen.
 
-**Required Ansible collections:**
+TLS-Zertifikatsprüfung ist standardmäßig aktiv. Eine interne CA gehört in den Truststore des Controllers. `validate_certs: false` ist nur eine ausdrückliche Konfiguration für eine entsprechend abgegrenzte Umgebung.
+
+## Installation
+
+Die Collection wird aus diesem Repository gebaut. Die folgenden Befehle benötigen kein auf Galaxy veröffentlichtes Release:
+
 ```bash
+git clone https://github.com/OnkelDom/ansible-role-proxmox-automatic.git
+cd ansible-role-proxmox-automatic
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
 ansible-galaxy collection install -r collections/requirements.yml
+make build
+ansible-galaxy collection install ./degitag-proxmox-0.2.0.tar.gz --force
 ```
 
-**Note:** This role uses the new `community.proxmox` collection.
+Die Beispiele verwenden die Playbooks aus dem Checkout und die installierte Collection. Für lokale Entwicklung stattdessen `make prepare` ausführen: Es erzeugt ignorierte Verweise auf den Checkout unter `.collections/` und `.ci-roles/`.
 
-## 📚 Quick Start
-
-### Minimal Configuration
+API-Zugang zentral im eigenen Inventory hinterlegen. Das Token-Secret gehört in Ansible Vault:
 
 ```yaml
-# playbook.yml
-- hosts: proxmox_vms
-  roles:
-    - lenmail.proxmox_automatic
-  vars:
-    proxmox_automatic_api_host: "pve.example.com"
-    proxmox_automatic_api_password: "your-api-password"
-    proxmox_automatic_hypervisor: "pve-node1"
-    proxmox_automatic_installer_backend: "rocky_kickstart"
+# inventory/group_vars/all/main.yml
+proxmox_api:
+  host: pve.example.com
+  token_id: automation@pve!ansible
+  token_secret: "{{ vault_proxmox_token_secret }}"
+  validate_certs: true
 ```
-
-```ini
-# inventory
-[proxmox_vms]
-web01 proxmox_automatic_vmid=101 ansible_host=web01.example.com
-db01 proxmox_automatic_vmid=102 ansible_host=db01.example.com
-```
-
-`ansible_host` is currently also used as the Proxmox VM name and as the guest hostname in the generated installer configuration. From an operations perspective, treat `ansible_host` as the desired system FQDN for this role, not only as a transport address.
-
-### Example Inventory Layout
-
-This repository ships a complete example inventory under [examples/inventory](/Users/dominik.lenhardt/git/ansible_roles/ansible-role-proxmox-automatic/examples/inventory) plus an example playbook at [examples/playbook.yml](/Users/dominik.lenhardt/git/ansible_roles/ansible-role-proxmox-automatic/examples/playbook.yml).
-
-Structure:
-
-```text
-examples/
-├── playbook.yml
-└── inventory/
-    ├── hosts.yml
-    ├── group_vars/
-    │   ├── all.yml
-    │   ├── rocky_vms.yml
-    │   └── debian_vms.yml
-    └── host_vars/
-        ├── rocky01.example.com.yml
-        ├── rocky02.example.com.yml
-        ├── debian01.example.com.yml
-        └── debian02.example.com.yml
-```
-
-Usage:
 
 ```bash
-ansible-playbook -i examples/inventory/hosts.yml examples/playbook.yml
+mkdir -p inventory/group_vars/all
+EDITOR=vim ansible-vault create inventory/group_vars/all/vault.yml
+# vault_proxmox_token_secret im Vault hinterlegen; Editor bei Bedarf:
+EDITOR=vim ansible-vault edit inventory/group_vars/all/vault.yml
 ```
 
-The example inventory demonstrates:
-- shared API, storage and HA settings in `group_vars/all.yml`
-- backend-specific defaults in `group_vars/rocky_vms.yml` and `group_vars/debian_vms.yml`
-- per-host VM IDs, IPs and install source modes in `host_vars/`
-- both online and CD-only installation flows
-- Debian with multiple NICs
+Vault-Läufe benötigen `--ask-vault-pass` oder eine konfigurierte Vault-ID.
 
-### Debian 13 Example
+## Firewall konfigurieren
+
+### Welche Ebene ist zuständig?
+
+| Ebene | Konfiguration | Wirkung und Einstieg |
+|---|---|---|
+| Cluster | `proxmox_cluster_firewall` | Sicherheitsgruppen, Aliase, IP-Sets und explizite Hostregeln; `playbooks/firewall.yml` |
+| VM auf Proxmox | `proxmox_firewall.pve_enabled: true` | Gruppenreferenzen, eigene VM-Regeln, Policies und Firewall-Flag an VM-NICs; `playbooks/deploy.yml` |
+| Gastbetriebssystem | `proxmox_firewall.guest_enabled: true` | Eigene nftables-Tabelle im Gast; Deployment oder `playbooks/configure_guests.yml` |
+
+Beide VM-bezogenen Schalter sind standardmäßig `false`. `management_sources` muss bei Aktivierung gesetzt sein und den tatsächlichen SSH-Zugriff abdecken. Für wirksamen PVE-Filterschutz müssen zusätzlich die Firewall-Aktivierung und das Backend auf Cluster und Nodes passend eingerichtet sein.
+
+### 1. Zentrale Gruppen, Aliase und IP-Sets
+
+Für den separaten Firewall-Lauf einen repräsentativen Host je Cluster ergänzen:
 
 ```yaml
-# host_vars/swarm01.yml
-proxmox_automatic_installer_backend: "debian13_preseed"
-proxmox_automatic_source_iso_path: "/srv/iso/debian-13.0.0-amd64-netinst.iso"
-proxmox_automatic_networks:
-  - name: net0
-    interface_name: ens18
-    bridge: vmbr1
-    vlanid: 30
-    ip: "192.0.2.11"
-    netmask: "255.255.255.0"
-    gateway: "192.0.2.1"
-proxmox_automatic_users:
-  - name: "litsadmin"
-    fullname: "LITS Admin"
-    password: "$6$..."
-    password_encrypted: true
-    groups: ["sudo"]
-    sudo_commands: "ALL"
-    sudo_nopasswd: true
-    ssh_key: "ssh-ed25519 AAAA..."
+# inventory/hosts.yml
+all:
+  children:
+    proxmox_clusters:
+      hosts:
+        production:
+          ansible_connection: local
+    proxmox_vms:
+      hosts:
+        web01.example.com: {}
 ```
 
-Generated installer media names are derived automatically from the target FQDN in `ansible_host`:
-- Rocky Kickstart ISO: `ks-<ansible_host>`
-- Debian Preseed ISO: `preseed-<ansible_host>`
-
-Set `proxmox_automatic_generated_iso_name` only when you explicitly need to override that artifact name.
-
-### GPU Passthrough Example
-
-For workloads that require direct PCI device access, define the Proxmox `hostpci` map in host variables. When the passed-through GPU should be the only graphics device, set `proxmox_automatic_vga` to `none`.
+Der bevorzugte Betriebsweg ist `playbooks/firewall.yml`. Die Zuweisung zu VMs erfolgt beispielsweise in `group_vars/webservers.yml` über `proxmox_firewall.groups: [management, webserver]`. Im Inventory steht **ein Host je Cluster** in `proxmox_clusters`. VM-Provisionierung und Gastzugriff sind für diesen Weg nicht erforderlich.
 
 ```yaml
-# host_vars/llm.example.com.yml
-proxmox_automatic_memory: 36864
-proxmox_automatic_vcpu: 12
-proxmox_automatic_vga: "none"
-proxmox_automatic_hostpci:
-  hostpci0: "0000:04:00.0,pcie=1,x-vga=1"
-  hostpci1: "0000:05:00.0,pcie=1"
+# group_vars/proxmox_clusters.yml
+proxmox_api:
+  host: pve.example.com
+  token_id: automation@pve!ansible
+  token_secret: "{{ vault_proxmox_token_secret }}"
+  validate_certs: true
+
+proxmox_cluster_firewall:
+  aliases:
+    - name: monitoring
+      cidr: 192.0.2.20
+  ipsets:
+    - name: management
+      cidrs:
+        - cidr: 192.0.2.0/24
+        - cidr: 2001:db8:10::/64
+    - name: application
+      cidrs:
+        - cidr: 198.51.100.0/24
+  groups:
+    - name: management
+      rules:
+        - name: ssh
+          type: in
+          action: ACCEPT
+          source: +management
+          proto: tcp
+          dport: '22'
+    - name: webserver
+      rules:
+        - name: https
+          type: in
+          action: ACCEPT
+          proto: tcp
+          dport: '443'
+    - name: database
+      rules:
+        - name: postgres
+          type: in
+          action: ACCEPT
+          source: +application
+          proto: tcp
+          dport: '5432'
+  rules: []
+  options: {}
 ```
-
-From a DevOps and platform architecture perspective, keep the PCI mapping host-specific. PCI addresses are node-local hardware facts and should not be modeled as shared group defaults unless every target node is intentionally identical.
-
-### Installation Source Modes
-
-```yaml
-proxmox_automatic_install_source: "online"  # or "cdrom"
-```
-
-From a DevOps operating model, this variable controls whether the installer should use external repositories or only the attached installation media.
-
-- `online`
-  - Rocky uses the configured `url` and `repo` sources.
-  - Debian uses the configured HTTP mirrors plus security repositories.
-- `cdrom`
-  - Rocky installs only from the attached installer ISO.
-  - Debian disables mirrors and keeps the installer CD as the only package source.
-  - Debian also reduces the installer package set to packages that are expected on the attached medium. Components such as `qemu-guest-agent` should be applied afterwards through Ansible if the chosen ISO does not ship them.
-
-For Debian, `cdrom` mode is only robust when the source ISO already contains the required packages.
-
-- A plain `netinst` ISO is usually too small for a true offline workflow.
-- Use a full Debian DVD image or a curated custom ISO if Dominik needs deterministic CD-only provisioning.
-
-### IPv6 Configuration Example
-
-```yaml
-# group_vars/all.yml
-proxmox_automatic_ipv6_enabled: true
-proxmox_automatic_ipv6_dns_servers:
-  - "2606:4700:4700::1111"
-  - "2606:4700:4700::1001"
-
-# host_vars/web01.yml
-proxmox_automatic_networks:
-  - name: net0
-    bridge: vmbr0
-    ip: "192.168.1.10"
-    netmask: "255.255.255.0"
-    gateway: "192.168.1.1"
-    ipv6: "2001:db8:1::10/64"
-    ipv6_gateway: "2001:db8:1::1"
-```
-
-### High Availability Configuration Example
-
-#### Option 1: Automatic HA Rule per Hypervisor (Default & Recommended)
-
-```yaml
-# group_vars/all.yml or defaults
-proxmox_automatic_ha_enabled: true          # Default: true
-proxmox_automatic_ha_group_auto: true       # Default: true
-proxmox_automatic_ha_group_manage: true     # Default: true
-
-# Inventory
-[proxmox_vms]
-web01 proxmox_automatic_hypervisor=srv-hyp-01.local
-web02 proxmox_automatic_hypervisor=srv-hyp-01.local
-db01 proxmox_automatic_hypervisor=srv-hyp-02.local
-db02 proxmox_automatic_hypervisor=srv-hyp-03.local
-```
-
-**Result:**
-- HA rule `ha-group-srv-hyp-01` created with shared node-affinity for `srv-hyp-01`
-  - VMs: web01, web02
-- HA rule `ha-group-srv-hyp-02` created with shared node-affinity for `srv-hyp-02`
-  - VMs: db01
-- HA rule `ha-group-srv-hyp-03` created with shared node-affinity for `srv-hyp-03`
-  - VMs: db02
-
-**Benefits:**
-- ✅ VMs prefer their hypervisor (priority 0)
-- ✅ Automatic failover to other cluster nodes
-- ✅ Zero manual configuration needed
-- ✅ One shared HA rule per hypervisor
-
-#### Option 2: Manual HA Rule Assignment
-
-```yaml
-# group_vars/production.yml
-proxmox_automatic_ha_enabled: true
-proxmox_automatic_ha_group_auto: false      # Disable auto mode
-proxmox_automatic_ha_group_manage: true
-proxmox_automatic_ha_group: "ha-group-production"
-proxmox_automatic_ha_group_nodes: "pve-node1:0,pve-node2:1,pve-node3:2"
-proxmox_automatic_ha_group_nofailback: false
-proxmox_automatic_ha_group_comment: "Production HA rule - shared across all VMs"
-
-# host_vars/db01.yml
-proxmox_automatic_ha_comment: "Primary database server - critical service"
-```
-
-**Use case:** All VMs in a rule should share the same HA node-affinity configuration
-
-#### Option 3: Using Existing HA Rules
-
-```yaml
-# group_vars/production.yml
-proxmox_automatic_ha_enabled: true
-proxmox_automatic_ha_group_auto: false      # Disable auto mode
-proxmox_automatic_ha_group_manage: false    # Use existing rule
-proxmox_automatic_ha_group: "ha-group-production"
-
-# host_vars/db01.yml
-proxmox_automatic_ha_comment: "Primary database server"
-```
-
-**Note:** The HA rule must already exist in your Proxmox cluster:
-- Proxmox Web UI: Datacenter → HA
-- CLI/API: create a node-affinity rule that already contains the intended resources and nodes
-
-#### Option 4: Disable HA
-
-```yaml
-# group_vars/development.yml
-proxmox_automatic_ha_enabled: false
-```
-
-## 🎯 Understanding Hierarchical Configuration
-
-This role uses an intelligent merge system that combines configurations from different levels:
-
-**Priority Order (highest to lowest):**
-```
-Playbook variables → host_vars/ → group_vars/ → defaults/main.yml
-```
-
-### Storage Configuration Hierarchy
-
-The role supports three levels of storage configuration:
-
-- `proxmox_automatic_storage_config_defaults` - Base configuration
-- `proxmox_automatic_storage_config_group_vars` - Group-specific additions
-- `proxmox_automatic_storage_config_host_vars` - Host-specific configuration
-
-**Example:**
-
-```yaml
-# defaults/main.yml - All VMs get this base disk
-proxmox_automatic_storage_config_defaults:
-  - name: virtio0
-    size: "20"
-    disk: vda
-    bootloader: true
-
-# group_vars/databases.yml - Database servers get additional storage
-proxmox_automatic_storage_config_group_vars:
-  - name: virtio0
-    size: "40"  # Override base size
-  - name: virtio1
-    size: "200"  # Additional data disk
-
-# host_vars/db01.yml - Specific host gets backup disk
-proxmox_automatic_storage_config_host_vars:
-  - name: virtio2
-    size: "100"  # Backup storage
-```
-
-**Result:** `db01` will have 3 disks: 40GB system, 200GB data, 100GB backup.
-
-### Package Configuration Hierarchy
-
-Packages are split into two categories for maximum flexibility:
-
-- `proxmox_automatic_packages_default` - Base packages installed on **all** VMs
-- `proxmox_automatic_packages_additional` - Additional packages per group/host
-
-**Example:**
-
-```yaml
-# defaults/main.yml - Base packages on all VMs
-proxmox_automatic_packages_default:
-  - bash-completion
-  - vim
-  - git
-  - htop
-  - tcpdump
-  # ... many more essential tools
-
-# group_vars/webservers.yml - Web-specific packages
-proxmox_automatic_packages_additional:
-  - httpd
-  - php
-  - php-mysqlnd
-
-# host_vars/web01.yml - Host-specific package
-proxmox_automatic_packages_additional:
-  - php-redis  # Only web01 needs Redis
-```
-
-**Result:** All VMs get the base tools, webservers get PHP/Apache, web01 additionally gets php-redis.
-
-### User Configuration Hierarchy
-
-Similar hierarchical approach for users:
-
-```yaml
-# defaults/main.yml - Standard admin user
-proxmox_automatic_users_defaults:
-  root:
-    password: "$6$encrypted_password"
-    ssh_key: "ssh-rsa AAAA..."
-
-# group_vars/webservers.yml - Web-specific service user
-proxmox_automatic_users_group_vars:
-  nginx:
-    shell: "/bin/false"
-    home: "/var/www"
-
-# host_vars/web01.yml - Host-specific developer access
-proxmox_automatic_users_host_vars:
-  developer:
-    password: "$6$dev_password"
-    groups: ["wheel"]
-```
-
-### Network Configuration Hierarchy
-
-```yaml
-# defaults/main.yml - Standard network
-proxmox_automatic_networks_defaults:
-  - name: net0
-    bridge: vmbr0
-
-# group_vars/databases.yml - Database VLAN
-proxmox_automatic_networks_group_vars:
-  - name: net1
-    bridge: vmbr1
-    vlanid: 200
-
-# host_vars/db01.yml - Additional management interface
-proxmox_automatic_networks_host_vars:
-  - name: net2
-    bridge: vmbr2
-    vlanid: 100
-```
-
-## 🛠️ Configuration
-
-### Variable Documentation
-
-For a complete list of all 96 configuration variables with detailed descriptions and examples, see **[VARIABLES.md](VARIABLES.md)**.
-
-### Most Important Variables
-
-**Required:**
-- `proxmox_automatic_api_host` - Proxmox API host
-- `proxmox_automatic_api_password` - Proxmox API password
-- `proxmox_automatic_hypervisor` - Target Proxmox node
-
-**Commonly Used:**
-```yaml
-# VM Resources
-proxmox_automatic_memory: 2048          # RAM in MB
-proxmox_automatic_vcpu: 2               # CPU cores
-
-# Network
-proxmox_automatic_networks:
-  - name: net0
-    bridge: vmbr0
-    ip: "192.168.1.10"
-    netmask: "255.255.255.0"
-    gateway: "192.168.1.1"
-    vlanid: 100
-
-# Storage
-proxmox_automatic_storage_config:
-  - name: virtio0
-    size: "20"
-    disk: vda
-    bootloader: true
-
-# High Availability (enabled by default)
-proxmox_automatic_ha_enabled: true      # Default: true
-proxmox_automatic_ha_group_auto: true   # Auto HA rule per hypervisor
-
-# Packages
-proxmox_automatic_packages_additional:
-  - "httpd"
-  - "php"
-```
-
-### Configuration Hierarchy
-
-This role uses a powerful hierarchical configuration system:
-
-```
-defaults/main.yml  →  group_vars/  →  host_vars/  →  playbook vars
-   (lowest)              (medium)       (higher)       (highest)
-```
-
-**Example:** Storage Configuration Merging
-```yaml
-# defaults/main.yml - Base disk for all VMs
-proxmox_automatic_storage_config_defaults:
-  - name: virtio0
-    size: "20"
-
-# group_vars/databases.yml - Additional disk for DB servers
-proxmox_automatic_storage_config_group_vars:
-  - name: virtio1
-    size: "100"
-
-# host_vars/db-master.yml - Extra disk for master only
-proxmox_automatic_storage_config_host_vars:
-  - name: virtio2
-    size: "200"
-
-# Result: db-master gets 3 disks (20GB + 100GB + 200GB)
-```
-
-## ⚙️ Quick Reference
-
-### Variable Categories
-
-| Category | Variables | Description |
-|----------|-----------|-------------|
-| **[Core](VARIABLES.md#core-configuration)** | 4 vars | Installation paths, dependencies |
-| **[Proxmox API](VARIABLES.md#proxmox-api-configuration)** | 4 vars | API credentials, SSL validation |
-| **[VM Config](VARIABLES.md#vm-configuration)** | 12 vars | CPU, RAM, boot settings |
-| **[Storage](VARIABLES.md#storage-configuration)** | 5 vars | Disks, volumes, LVM |
-| **[Network](VARIABLES.md#network-configuration)** | 10 vars | Interfaces, VLANs, IPv6 |
-| **[Security](VARIABLES.md#security-configuration)** | 3 vars | Firewall, SELinux, SSH |
-| **[Users](VARIABLES.md#user-management)** | 6 vars | Accounts, SSH keys |
-| **[High Availability](VARIABLES.md#high-availability-configuration)** | 11 vars | HA rules, failover |
-| **[Packages](VARIABLES.md#package-management)** | 7 vars | Software installation |
-| **[Performance](VARIABLES.md#performance-tuning)** | 8 vars | Throttling, retries |
-
-For detailed documentation of all variables, see **[VARIABLES.md](VARIABLES.md)**.
-
-## 📚 Examples
-
-### Database Server with Multiple Disks
-
-```yaml
-# host_vars/db01.yml
-proxmox_automatic_memory: 8192
-proxmox_automatic_vcpu: 4
-
-# Storage hierarchy example
-proxmox_automatic_storage_config_host_vars:
-  - name: virtio0  # System disk
-    size: "40"
-    disk: vda
-    bootloader: true
-    vg:
-      - name: system
-        lv:
-          - name: root
-            mount: /
-            size: 8192
-            fstype: xfs
-          - name: swap
-            mount: swap
-            size: 4096
-            fstype: swap
-          - name: var
-            mount: /var
-            size: 4096
-            fstype: xfs
-          - name: tmp
-            mount: /tmp
-            size: 2048
-            fstype: xfs
-            
-  - name: virtio1  # Database storage
-    size: "200"
-    disk: vdb
-    vg:
-      - name: database
-        lv:
-          - name: mysql
-            mount: /var/lib/mysql
-            size: 1024
-            grow: true
-            fstype: xfs
-            
-  - name: virtio2  # Log storage
-    size: "50"
-    disk: vdc
-    vg:
-      - name: logs
-        lv:
-          - name: mysqllogs
-            mount: /var/log/mysql
-            size: 1024
-            grow: true
-            fstype: xfs
-
-# Network configuration
-proxmox_automatic_networks_host_vars:
-  - name: net1
-    bridge: vmbr1
-    ip: "10.10.20.10"
-    netmask: "255.255.255.0"
-    vlanid: 200  # Database VLAN
-
-# Database-specific packages
-proxmox_automatic_packages_additional:
-  - "mariadb-server"
-  - "mariadb-client"
-  - "python3-pymysql"
-```
-
-### Web Server Cluster
-
-```yaml
-# group_vars/webservers.yml
-proxmox_automatic_memory: 4096
-proxmox_automatic_vcpu: 2
-
-# Web servers get additional storage for content
-proxmox_automatic_storage_config_group_vars:
-  - name: virtio1
-    size: "100"
-    disk: vdb
-    vg:
-      - name: web
-        lv:
-          - name: www
-            mount: /var/www
-            size: 1024
-            grow: true
-            fstype: xfs
-
-# Web VLAN
-proxmox_automatic_networks_group_vars:
-  - name: net1
-    bridge: vmbr1
-    ip: "10.10.10.10"
-    netmask: "255.255.255.0"
-    vlanid: 100
-
-# Web-specific packages
-proxmox_automatic_packages_additional:
-  - "httpd"
-  - "php"
-  - "php-mysqlnd"
-
-# Web admin user
-proxmox_automatic_users_group_vars:
-  webadmin:
-    password: "$6$rounds=656000$YourSaltHere$YourHashHere"
-    groups: ["wheel", "apache"]
-    shell: "/bin/bash"
-```
-
-### Development Environment
-
-```yaml
-# group_vars/development.yml
-proxmox_automatic_selinux_mode: "permissive"
-proxmox_automatic_firewall_enabled: false
-
-# Development packages (additional to base packages)
-proxmox_automatic_packages_additional:
-  - "nodejs"
-  - "npm"
-  - "python3-pip"
-  - "docker-ce"
-  - "docker-ce-cli"
-  - "containerd.io"
-
-# Developer users with sudo access
-proxmox_automatic_users_group_vars:
-  developer:
-    password: "$6$rounds=656000$DevSalt$DevHash"
-    groups: ["wheel", "docker"]
-    ssh_key: "ssh-rsa AAAA...developer-key"
-
-# Additional development repositories
-proxmox_automatic_repos:
-  - name: "docker-ce"
-    baseurl: "https://download.docker.com/linux/centos/9/$basearch/stable"
-    gpgcheck: true
-    gpgkey: "https://download.docker.com/linux/centos/gpg"
-```
-
-## 🚀 Advanced Usage
-
-### Custom Installer Templates
-
-You can extend the role by providing backend-specific templates:
-
-```yaml
-# Rocky
-proxmox_automatic_kickstart_template: "custom-kickstart.cfg.j2"
-
-# Debian
-proxmox_automatic_preseed_template: "custom-preseed.cfg.j2"
-```
-
-### Backend Model
-
-- `rocky_kickstart`: keeps the original OS ISO on `ide2` and generates a second config ISO on `ide3`.
-- `debian13_preseed`: renders `preseed.cfg`, remasters the Debian installer ISO on the controller, and attaches only the generated installer ISO.
-- `proxmox_automatic_install_source` selects whether package installation should use online repositories or CD-only media.
-- `proxmox_automatic_source_iso_path` is recommended for Debian remastering workflows.
-- `proxmox_automatic_generated_iso_name` is only an optional override. By default the role generates unique artifact names from `ansible_host`.
-- `proxmox_automatic_debian_purge_microcode` defaults to `true` because Debian 13 can auto-install virtual CPU microcode packages that leave the generated `initrd.img` unusable on Proxmox/QEMU guests.
-
-For Debian networking, the installer itself configures the primary NIC only. Additional NICs from `proxmox_automatic_networks` are rendered into the installed system during `late_command`, so static multi-NIC server builds are supported even though the installer continues to work off `net0`.
-
-### Rocky / RHEL Source ISO Preparation
-
-For `rocky_kickstart`, the role does **not** patch the Rocky or RHEL bootloader. As a DevOps operating model, this is intentional: the role owns the generated Kickstart payload on the second CD, while the base installer ISO remains a curated platform artifact.
-
-That means a stock Rocky ISO is not sufficient by itself. The primary installer ISO must already contain boot parameters that tell Anaconda where to find the Kickstart file on the second CD.
-
-Recommended boot parameter pattern:
-
-```text
-inst.ks=hd:LABEL=KS_<fqdn>:/ks.cfg
-```
-
-Example for host `swarm01.lenmail.de`:
-
-```text
-inst.ks=hd:LABEL=KS_swarm01.lenmail.de:/ks.cfg
-```
-
-The role creates the second ISO with:
-
-- volume label `KS_<ansible_host>`
-- file `/ks.cfg`
-
-Operationally, you have two workable approaches:
-
-1. Maintain one pre-adapted Rocky/RHEL installer ISO per host class and set the appropriate `inst.ks=` boot parameter there.
-2. Maintain a small set of curated installer ISOs per environment if you want different boot defaults for lifecycle stage, platform generation, or storage policy.
-
-Example workflow on a Linux build host to adapt a Rocky ISO:
 
 ```bash
-mkdir -p /tmp/rocky-src /tmp/rocky-build
-xorriso -osirrox on -indev Rocky-9.6-x86_64-dvd.iso -extract / /tmp/rocky-src
-vim /tmp/rocky-src/isolinux/isolinux.cfg
-vim /tmp/rocky-src/EFI/BOOT/grub.cfg
+ansible-playbook -i inventory/hosts.yml playbooks/firewall.yml --check
+ansible-playbook -i inventory/hosts.yml playbooks/firewall.yml
 ```
 
-Add the Kickstart boot parameter to the default boot entries, for example:
+Eine Sicherheitsgruppe enthält Regeln und wird anschließend von VMs referenziert. Zentrale `rules` betreffen hingegen die **Proxmox-Hosts**. `options` kann ausschließlich ausdrücklich gesetzte Werte `enable`, `policy_in` und `policy_out` verändern. Mit `options: {}` bleiben globale Aktivierung und Standard-Policies unverändert. `options.enable: true` aktiviert die Datacenter-Firewall ausdrücklich; einen Wechsel des Node-Firewall-Backends führt die Collection nicht durch. Vor einer restriktiven Host-Policy müssen Management-, Cluster- und Infrastrukturpfade im Regelwerk berücksichtigt sein.
 
-```text
-inst.ks=hd:LABEL=KS_swarm01.lenmail.de:/ks.cfg
-```
+Zentrale Firewall-Objekte benötigen `Sys.Modify` auf `/`; die eingebaute Rolle `PVEAdmin` reicht dafür nicht aus. Für den Dauerbetrieb ist diese Berechtigung gezielt einem separaten Policy-Account beziehungsweise dessen Token zuzuweisen. Wenn Token und Passwort konfiguriert sind, hat die Token-Anmeldung Vorrang. Vor einer Aktivierung müssen SSH und die Proxmox-API (standardmäßig TCP 22 und 8006) für die aktuellen internen und gegebenenfalls öffentlichen Adminadressen ausdrücklich freigegeben und ein Rückweg vorbereitet sein.
 
-Then rebuild the installer ISO:
+### Eigentum, Reihenfolge und Löschung
 
-```bash
-xorriso -as mkisofs \
-  -o /tmp/rocky-build/rocky9.6-ks.iso \
-  -V ROCKY-9-6-X86_64 \
-  -J -R -T \
-  -b isolinux/isolinux.bin \
-  -c isolinux/boot.cat \
-  -no-emul-boot \
-  -boot-load-size 4 \
-  -boot-info-table \
-  -eltorito-alt-boot \
-  -e images/efiboot.img \
-  -no-emul-boot \
-  /tmp/rocky-src
-```
+- Sicherheitsgruppen, Aliase und IP-Sets werden nur aus der ausdrücklich übergebenen Liste verwaltet. Die Collection reserviert ihren Kommentar als Eigentumsmarker `lenmail.proxmox`.
+- Gleichnamige vorhandene Objekte ohne diesen Marker werden nicht automatisch übernommen.
+- Innerhalb eines verwalteten IP-Sets ist `cidrs` die vollständige Mitgliederliste. Fehlende Mitglieder werden entfernt.
+- Regeln erhalten über `name` eine stabile Identität im Kommentar. Die Reihenfolge in der Liste ist verbindlich. Vorhandene fremde Regeln bleiben in ihrer relativen Reihenfolge **vor** dem verwalteten Block; sie können daher früher entscheiden.
+- In einem übergebenen Regelwerk werden zuvor verwaltete, jetzt fehlende Regeln entfernt. `state: absent` ist ebenfalls möglich. Ein ausgelassenes `rules`-Feld beim direkten Modulaufruf verändert dieses Regelwerk nicht.
+- Für ein ganzes Objekt gilt `state: absent`. Abhängige Referenzen zuerst entfernen, dann die Gruppe beziehungsweise das IP-Set löschen. Eine Gruppe lediglich aus der Objektliste zu entfernen löscht sie nicht.
+- Proxmox verarbeitet mehrere API-Schreibzugriffe einzeln. Ein Firewall-Lauf ist keine atomare Transaktion. Parallele Bearbeitung derselben Objekte ist zu vermeiden; Digests schützen die unterstützten Einzeloperationen.
+- Vor Schreibzugriffen entsteht lokal ein Journal unter `.proxmox-firewall-backups/`, mit Modus `0600`. Es enthält gelesene Ausgangszustände und geplante API-Operationen. Der Modulrückgabewert `backup_file` benennt die Datei auch bei Fehlern. Ein Rollback muss anhand des Journals und der tatsächlichen API-Lage gezielt erfolgen.
 
-From a systems architecture standpoint, validate both boot paths before using the ISO in production:
-
-- BIOS boot path via `isolinux`
-- UEFI boot path via `grub`
-
-If either path is missing the `inst.ks=` argument, the installer will fall back to interactive mode even though the second config CD is attached correctly.
-
-### Integration with Ansible Vault
+### 2. Regeln und Gruppen einer VM zuweisen
 
 ```yaml
-# group_vars/all/vault.yml (encrypted with ansible-vault)
-vault_proxmox_password: "super-secret-password"
-vault_smtp_password: "email-password"
-
-# group_vars/all/main.yml
-proxmox_automatic_api_password: "{{ vault_proxmox_password }}"
-proxmox_automatic_smtp_password: "{{ vault_smtp_password }}"
+# inventory/group_vars/webservers.yml oder host_vars/web01.example.com.yml
+proxmox_firewall:
+  pve_enabled: true
+  groups: [management, webserver]
+  management_sources: [192.0.2.0/24]
+  policy_in: DROP
+  policy_out: ACCEPT
+  rules:
+    - name: monitoring-agent
+      type: in
+      action: ACCEPT
+      source: monitoring
+      proto: tcp
+      dport: '9100'
+  guest_enabled: false
+  guest_rules: []
 ```
 
-### Conditional VM Creation
+Die referenzierten zentralen Gruppen und der Alias `monitoring` müssen zuvor angelegt sein. Die VM-Regeln werden in dieser Reihenfolge aufgebaut: SSH-Ausnahmen aus `management_sources`, Gruppenreferenzen in Listenreihenfolge, danach `rules`. Fremde bestehende Regeln bleiben vor diesem verwalteten Block erhalten. `deploy` aktiviert außerdem das Firewall-Flag an den VM-NICs und erhält dabei MAC-Adressen und andere NIC-Optionen.
+
+```bash
+ansible-playbook -i inventory/hosts.yml playbooks/deploy.yml --limit web01.example.com --check
+ansible-playbook -i inventory/hosts.yml playbooks/deploy.yml --limit web01.example.com
+```
+
+Dies ist der Deployment-Einstieg einschließlich VM-Identitätsprüfung und Gastverifikation. `playbooks/firewall.yml` verwaltet ausschließlich zentrale Objekte und weist vorhandenen VMs keine Gruppen zu.
+
+### 3. Optionale nftables-Regeln im Gast
 
 ```yaml
-# Create VMs only in production
-- hosts: all
-  roles:
-    - role: lenmail.proxmox_automatic
-      when: environment == "production"
+# Vollständige gewünschte proxmox_firewall-Konfiguration am Host hinterlegen.
+proxmox_firewall:
+  pve_enabled: true
+  groups: [management, webserver]
+  management_sources: [192.0.2.0/24]
+  policy_in: DROP
+  policy_out: ACCEPT
+  guest_enabled: true
+  guest_rules:
+    - name: https
+      type: in
+      action: ACCEPT
+      proto: tcp
+      dport: '443'
 ```
 
-## 🔧 Troubleshooting
+`guest_enabled: true` verwaltet eine eigene nftables-Tabelle `inet lenmail_proxmox` und einen eigenen Systemd-Dienst. Bestehende Tabellen und deren Dienste werden nicht gelöscht oder deaktiviert. Eine bereits aktive firewalld-, UFW- oder nftables-Systemkonfiguration führt vor Aktivierung zum Abbruch. Eine geplante Koexistenz kann ausdrücklich über `allow_other_firewalls: true` freigegeben werden. Bei neuen Rocky-Installationen mit aktivierter Gast-nftables-Policy wird firewalld im Installer deaktiviert.
 
-### Common Issues
+`guest_rules` verwendet ebenfalls stabile Namen, `type: in|out`, `action: ACCEPT|DROP|REJECT`, `proto`, `source`, `dest`, `dport` und `sport`. Gastadressen sind IPs/CIDRs; Proxmox-Aliase, IP-Sets und Sicherheitsgruppen werden dort nicht stillschweigend expandiert. Ports sind Zahlen oder `start:end`-Bereiche. Basis-Policies sind `ACCEPT` oder `DROP`.
 
-1. **ISO Creation Fails**
-   ```bash
-   # Check dependencies
-   proxmox_automatic_install_dependencies: true
-   ```
+Loopback, bestehende Verbindungen, ICMP/IPv6-Kontrollverkehr und DHCP-Antworten bleiben in der Gast-Basis erlaubt. Beide Firewall-Ebenen benötigen explizite `management_sources`; vor Aktivierung wird geprüft, ob sie die im Gast beobachtete SSH-Quelladresse abdecken. Die Regeln der Gruppen sollten bei abweichendem SSH-Port entsprechend angepasst sein. `guest_enabled: false` und `pve_enabled: false` lassen die jeweilige Ebene unverwaltet; sie entfernen keine zuvor eingerichtete Policy. Eine Deaktivierung bestehender Policies muss als eigene, bewusste Betriebsänderung erfolgen.
 
-2. **VM Creation Timeout**
-   ```yaml
-   # Increase timeouts
-   proxmox_automatic_create_vm_retries: 5
-   proxmox_automatic_create_vm_retry_delay: 10
-   ```
+`proxmox_guest.port` wird bereits im Installer gesetzt. Rocky richtet bei Bedarf zusätzlich das SELinux-Portlabel ein. Ein nachträglicher Portwechsel vorhandener Gäste gehört in eine geplante SSH-Migration; der bestehende Zugriff wird durch `guest` nicht umgestellt.
 
-3. **Network Issues**
-   ```yaml
-   # Use DHCP for testing
-   proxmox_automatic_dhcp_enabled: true
-   ```
-
-### Debug Mode
+Für bereits installierte Gäste:
 
 ```bash
-# Run with increased verbosity
-ansible-playbook -vvv playbook.yml
+ansible-playbook -i inventory/hosts.yml playbooks/configure_guests.yml --limit web01.example.com
 ```
 
-### Log Locations
+Dieser Einstieg prüft und konfiguriert den Gast einschließlich aktivierter Gast-Firewall. Er verwaltet weder VM-Hardware noch die PVE-VM-Firewall.
 
-- **Kickstart Files:** `{{ proxmox_automatic_files_dir }}/`
-- **Preseed Files:** `{{ proxmox_automatic_files_dir }}/`
-- **ISO Files:** `{{ proxmox_automatic_iso_dir }}/`
-- **VM Console:** Proxmox VE web interface → VM → Console
+### Ressourcenidentität beim Namespace-Wechsel
 
-## Testing
+Der öffentliche Collection-Name ist `degitag.proxmox`. Bestehende Laufzeitkennungen bleiben aus Kompatibilitätsgründen erhalten: Firewall-Eigentumsmarker `lenmail.proxmox`, VM-Installationsmarker `lenmail.proxmox:installing` beziehungsweise `:ready`, nftables-Tabelle `inet lenmail_proxmox` sowie `/etc/lenmail-proxmox.nft` und `lenmail-proxmox-firewall.service`. Sie identifizieren bereits verwaltete Ressourcen; ihre Umbenennung würde eine gesonderte Migration erfordern.
 
-For controller-side validation without touching Proxmox:
+## VM installieren
+
+Das folgende Beispiel kommt nach `inventory/host_vars/web01.example.com.yml`. Es verwendet die oben definierten API-Daten und zentralen Firewall-Gruppen. `bootstrap_public_key` muss einen eigenen öffentlichen SSH-Schlüssel enthalten; der Controller benötigt den zugehörigen privaten Schlüssel für SSH und einen funktionierenden Sudo-Zugang.
+
+```yaml
+proxmox_vm:
+  name: web01.example.com
+  vmid: 3011
+  node: pve01
+  pool: applications
+  iso_storage: local
+  disk_storage: local-lvm
+  hardware:
+    cores: 4
+    memory: 4096
+  networks:
+    - name: net0
+      interface_name: ens18
+      bridge: vmbr0
+      vlanid: 30
+      ip: 192.0.2.11
+      netmask: 255.255.255.0
+      gateway: 192.0.2.1
+  # Optional: vollständige eigene Disk-/Partitionierungsstruktur als disks.
+  # Ohne disks wird das kompatible Standardlayout verwendet.
+
+proxmox_install:
+  backend: debian_preseed
+  source: online
+  source_iso: /srv/iso/debian-13-amd64-netinst.iso
+  settings:
+    timezone: Europe/Berlin
+    dns_servers: [192.0.2.53]
+
+proxmox_guest:
+  host: 192.0.2.11
+  ssh_user: automation
+  users:
+    - name: automation
+      groups: [sudo]
+      ssh_key: "{{ bootstrap_public_key }}"
+      sudo_commands: ALL
+      sudo_nopasswd: true
+  # Wenn eine andere Baseline-Rolle diese Ressourcen verwaltet:
+  manage_users: true
+  manage_packages: false
+  manage_sysctl: false
+
+proxmox_ha:
+  enabled: false
+
+proxmox_firewall:
+  pve_enabled: true
+  groups: [management, webserver]
+  management_sources: [192.0.2.0/24]
+  policy_in: DROP
+  policy_out: ACCEPT
+  rules: []
+  guest_enabled: false
+  guest_rules: []
+```
 
 ```bash
-make syntax
-ansible-playbook tests/render_templates.yml
+ansible-playbook -i inventory/hosts.yml playbooks/deploy.yml --check
+ansible-playbook -i inventory/hosts.yml playbooks/deploy.yml
 ```
 
-For full local media generation tests, including ISO creation and Debian remastering, run on a controller with `xorriso`, `isolinux`, `syslinux`, and `libarchive-tools` installed:
+`proxmox_vm.name` ist der Systemname, `proxmox_guest.host` das SSH-Ziel und `proxmox_api.host` der API-Endpunkt. Die Adressen müssen nicht identisch sein. `ansible_host` wird im Kompatibilitätsweg weiterhin als Systemname verwendet.
+
+Die Standarddisk ist 20 GiB groß und enthält EFI, `/boot`, LVM-Root, `/var/log` und Swap. Mehrere VirtIO-Disks mit PVE-Optionen, mehrere NICs, VLAN, MAC, MTU, Bandbreitenlimit, CPU/Sockel, UEFI, TPM, VGA und PCI-Passthrough bleiben konfigurierbar. Auf Debian wird derzeit eine VG je Disk unterstützt; nicht unterstützte Konfigurationen werden abgewiesen.
+
+Neue VMs aktivieren NUMA, da der Standard RAM-Hotplug enthält. Bei `hardware.numa: false` muss `memory` aus `hardware.hotplug` entfernt werden. Der historische VGA-Wert `default` wird zu `std` normalisiert.
+
+Für Rocky Linux `proxmox_install.backend: rocky_kickstart` setzen und über `source_iso_name` das vorbereitete Haupt-ISO auf dem konfigurierten Proxmox-ISO-Storage auswählen. Das Haupt-ISO muss die Kickstart-Datei von der separat erzeugten Konfigurations-CD laden. `source: online` verwendet Paketquellen im Netz, `source: cdrom` benötigt ein Medium mit dem vollständigen Paketbestand. Debian verwendet `debian_preseed` beziehungsweise `debian13_preseed` und ein lokales Quell-ISO.
+
+Die Variablen sind in [VARIABLES.md](VARIABLES.md) indiziert; weitere Inventory-Beispiele liegen unter [examples/inventory](examples/inventory).
+
+## Betrieb vorhandener VMs
+
+1. Variablen normalisieren und VMID-/Namenskollisionen, Firewall-Definitionen und gemeinsame HA-Profile vor Änderungen prüfen.
+2. Pools und zentrale Firewall-Objekte vorbereiten.
+3. Nur für eine neue VM, einen eigenen unterbrochenen Installationslauf oder ausdrücklich `reinstall: true` Medien bauen und den Installer starten.
+4. SSH abwarten, Betriebssystem, erwartete Mountpoints und statische IPv4-Adressen prüfen. Diese Kontrollen ersetzen keine vollständige Prüfung aller LVM-Größen oder der Anwendung.
+5. Gewünschte Gastkonfiguration anwenden; danach nur eigene Installationsmedien entfernen und den Systemboot festlegen.
+6. Optional VM-Firewall und anschließend HA aktivieren.
+
+Vor einer HA-Registrierung prüft die Rolle Quorum sowie aktuelle Heartbeats des HA-Masters und des lokalen Ressourcenmanagers. Fehlende oder mehr als zwei Minuten alte Heartbeats führen vor dem Anlegen der HA-Ressource zum Abbruch. Die Rolle startet oder repariert keine HA-Dienste. Für Deployments ohne betriebsbereite HA-Verwaltung ist `proxmox_ha.enabled: false` zu setzen.
+
+Bestehende VMs mit anderem Namen oder anderer Ressourcenart führen zum Abbruch. Eine vorhandene gleichnamige VM erhält ohne expliziten Neuinstallationsauftrag keine Installationsmedien. Die interne Installationsmarkierung in der VM-Beschreibung ermöglicht die Wiederaufnahme eigener Läufe. Gleichnamige vorhandene VMs ohne Markierung werden nicht als eigene Installationen markiert.
+
+`proxmox_deploy.reinstall: true` ist ein destruktiver Installationsauftrag. Die VM muss vorher bewusst gestoppt sein. Die Collection löscht keine virtuellen Disks; der Installer partitioniert die konfigurierten Gastdisks neu. Ein VM-/Datenbackup gehört vor diesen Auftrag. Bei einer bloßen Wiederaufnahme ohne Neuinstallationsauftrag bleibt die Systemdisk vor dem Installer in der Bootreihenfolge; ein unvollständig installiertes System kann dadurch eine manuelle Entscheidung zum erneuten Installieren erfordern.
+
+Bei einer expliziten Neuinstallation fährt der Installer am Ende herunter. Mit `wait_for_install: true` wartet die Rolle auf den aktuellen QEMU-Status `stopped` und startet danach die Systemdisk in einem neuen QEMU-Prozess. Dadurch wird die geänderte Bootreihenfolge wirksam. Ohne Installationswartephase bleibt die fertig installierte VM ausgeschaltet und muss anschließend bewusst von Disk gestartet werden.
+
+Neuinstallationen erzeugen neue SSH-Hostkeys. Die Vertrauensdatei muss nach einem unabhängigen Abgleich gezielt aktualisiert werden, etwa anhand des über den authentifizierten Hypervisor abgefragten Guest Agents. Die Rolle schaltet die Hostkey-Prüfung nicht ab.
+
+`update_hardware: true` erlaubt ausschließlich die Änderung von CPU, Kernen, Sockeln, RAM und Autostart. Disks, MACs, EFI-/TPM-Disks und PCI-Mappings werden bei vorhandenen VMs nicht automatisch ersetzt. Änderungen können einen späteren Neustart erfordern.
+
+Der Deployment-Weg benötigt die lineare Ansible-Strategie ohne `serial`-Batches. Unabhängige Cluster- und Gastpflege laufen über eigene Playbooks.
+
+## Installationsmedien und Geheimnisse
+
+Installer-Eingaben und Quell-ISO werden gehasht. Ein Manifest prüft zusätzlich die lokale ISO-Prüfsumme; unveränderte Artefakte werden wiederverwendet. Der Remote-Name enthält VMID und volle ISO-SHA256. Ein vorhandener Remote-Name wird nur bei passender Größe wiederverwendet; es erfolgt kein vollständiger Remote-Download zur Inhaltsprüfung. Diese Namen sind als unveränderliche Artefakte zu behandeln.
+
+Uploads warten auf den erfolgreichen Proxmox-Task. Ein bereits vorhandenes Rocky-Haupt-ISO wird vor VM-Erstellung ebenfalls auf Verfügbarkeit geprüft.
+
+Konfigurationsdateien, lokale ISOs und Manifeste erhalten `0600`, Arbeitsverzeichnisse `0700`; Debian-Extraktionsverzeichnisse werden auch bei Fehlern bereinigt. Installer-Medien können Passwort-Hashes enthalten. SSH-Schlüssel und gesperrte Passwortanmeldung sind für Bootstrap-Zugänge zu bevorzugen.
+
+`proxmox_deploy.cleanup_local_artifacts: true` entfernt eigene lokale Artefakte nach erfolgreicher Installation. Remote-ISOs werden nicht automatisch gelöscht, da sie referenziert oder für Wiederaufnahme benötigt werden können. Retention auf Proxmox muss anhand der Artefaktnamen und tatsächlichen Referenzen erfolgen.
+
+`--check` liest vorhandene API-Zustände und prognostiziert unterstützte Änderungen. Es baut keine neuen ISOs, lädt nichts hoch und verbindet sich nicht mit neuen Gästen. Ein vollständiger Trockenlauf der Betriebssysteminstallation ist damit nicht möglich.
+
+## Migration und Abnahme
+
+Bestehende Inventories und der Rollenname bleiben nutzbar, wenn die Collection installiert ist. Named-Merges gelten weiter für die expliziten Legacy-Ebenen Defaults → Gruppe → Host → Playbook; Benutzer werden jetzt anhand ihres Namens zusammengeführt. Listen in der strukturierten Konfiguration sind dagegen vollständige Listen gemäß normaler Ansible-Variablenpriorität.
+
+Bewusste Änderungen:
+
+- Kein Beispiel-Admin mit Platzhalterpasswort mehr. Bootstrap-Zugang ausdrücklich definieren.
+- TLS-Prüfung standardmäßig aktiv; vorhandene explizite Ausnahmen bleiben wirksam.
+- Entfernte wirkungslose/ausgelagerte Optionen: SMTP, EPEL-Schalter, DNF-Automatic, Verantwortlicher/Hostbeschreibung und `ha_group_nofailback`. Vollständige Deployments weisen diese Eingaben mit Migrationshinweis ab.
+- Rocky verwendet jetzt tatsächlich die berechnete Backend-Paketliste.
+- Der vollständige Kompatibilitäts-Tag `proxmox_automatic` bleibt erhalten. Selektive alte Tags werden durch die getrennten Rolleneinstiege und Playbooks ersetzt; `--tags proxmox_validate` führt nur die Vorprüfung aus.
+- Interne Task-Dateien sind keine stabile öffentliche Schnittstelle. `create_kickstart`, `create_preseed` und `install_dependencies` bleiben als Adapter bestehen.
+- Eigene Installer-Templates erhalten `_proxmox_config`; alte Vorlagen müssen bei abweichender Variablenschnittstelle geprüft werden.
+
+Bei bisheriger Nutzung der unveröffentlichten Collection `lenmail.proxmox` die Rollen-, Modul- und Filteraufrufe auf `degitag.proxmox` sowie Collection-Abhängigkeiten umstellen. Der Legacy-Rollenname `proxmox_automatic` bleibt erhalten. Für dessen Auflösung außerhalb dieses Checkouts muss die installierte Collection zusätzlich im Rollenpfad unter diesem Namen verlinkt sein; `make prepare` richtet dies nur für die lokale Entwicklung ein.
+
+## Entwicklung und Tests
 
 ```bash
-make media
+source .venv/bin/activate
+make ci
+make package-smoke
 ```
 
-For real Proxmox end-to-end validation, the repository also contains a dedicated matrix:
+`make ci` umfasst Lint, Syntax, Python-Tests, Installer-/Firewall-Rendering und isolierte Medien-Fixtures inklusive Cache-Wiederholung. Die Medien-Fixture prüft Struktur und Bootkonfiguration; ihr Kernel/Initrd/BIOS-Stub ist absichtlich nicht bootfähig. Der GitHub-Workflow ist für Python 3.11 und 3.12 konfiguriert. Auf Linux mit installiertem nftables wird zusätzlich die nftables-Syntax geprüft; lokal auf macOS entfällt diese Kernelprüfung.
 
-- [tests/proxmox_e2e.yml](/Users/dominik.lenhardt/git/ansible_roles/ansible-role-proxmox-automatic/tests/proxmox_e2e.yml)
-- [tests/proxmox_e2e_cleanup.yml](/Users/dominik.lenhardt/git/ansible_roles/ansible-role-proxmox-automatic/tests/proxmox_e2e_cleanup.yml)
-- [tests/proxmox_e2e_matrix.yml](/Users/dominik.lenhardt/git/ansible_roles/ansible-role-proxmox-automatic/tests/proxmox_e2e_matrix.yml)
+Die echte E2E-Matrix liegt unter `tests/proxmox_e2e*.yml`: Rocky und Debian, online und CD-ROM, SSH, Layout und gemeinsame HA-Regel. Sie wird nur über `make e2e` ausdrücklich gestartet. CD-ROM-Installation benötigt ein Medium mit dem vollständigen erforderlichen Paketbestand. Für Offline-Gäste zusätzliche Paketinstallation entsprechend deaktivieren.
 
-That matrix covers Rocky online/CDROM and Debian online/CDROM with incremented VMIDs and IPs. It is intentionally kept outside CI because it provisions real VMs on a real Proxmox cluster.
+Vor produktiver Nutzung sind im Testcluster mindestens neue Installation, Wiederholung, Wiederaufnahme, explizite Neuinstallation, zentrale Gruppenänderung, VM-Gruppenzuordnung, Firewall-Zugriff aus erlaubten und gesperrten Netzen sowie beide Gastbetriebssysteme abzunehmen. Die E2E-Bereinigung prüft VM-Identität und Eigentumsmarkierungen; unveränderliche Remote-ISOs bleiben erhalten.
 
-The CI pipeline runs the full suite automatically on Ubuntu, including linting, render checks, Python syntax validation for the custom module, and media artifact generation.
+## Weitere Dokumentation
 
-## 📄 License
-
-MIT
-
-## 👥 Author Information
-
-This role is maintained by [lenmail](https://github.com/lenmail).
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## 📞 Support
-
-- [GitHub Issues](https://github.com/lenmail/ansible-role-proxmox-automatic/issues)
-- [Ansible Galaxy](https://galaxy.ansible.com/lenmail/proxmox_automatic)
+- [Variablenreferenz](VARIABLES.md), [Entwicklung und Abnahme](CONTRIBUTING.md), [Changelog](CHANGELOG.md), [Sicherheit](SECURITY.md)
+- [Eigenständiges Firewall-Beispiel](examples/firewall.yml), [Metrikserver-Rolle](roles/metric_server/README.md)
+- [Betriebsdokumentation in Lenmail-Outline](https://docs.lenmail.de/doc/ansible-proxmox-refactoring-und-zentrale-firewall-policies-DGBs0T8Jbq)
+- Lizenz: [MIT](LICENSE)

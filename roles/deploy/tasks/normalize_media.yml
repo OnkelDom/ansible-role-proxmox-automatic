@@ -1,0 +1,9 @@
+---
+- name: Normalize media-only configuration without requiring API credentials
+  ansible.builtin.set_fact:
+    _proxmox_config: >-
+      {{ dict(_proxmox_input_names | zip(query('ansible.builtin.vars', *_proxmox_input_names, default=''))) |
+         degitag.proxmox.normalize_config(false) }}
+  vars:
+    _proxmox_input_names: "{{ query('ansible.builtin.varnames', '^proxmox_') + ['ansible_host', 'inventory_hostname'] }}"
+  no_log: true

@@ -1,0 +1,52 @@
+---
+argument_specs:
+  main:
+    short_description: Configure one cluster-wide native PVE OTLP metric server
+    options:
+      proxmox_metric_server_name:
+        type: str
+        default: monitoring-otlp
+        description: name
+      proxmox_metric_server_state:
+        type: str
+        default: present
+        description: state
+        choices:
+          - present
+          - absent
+      proxmox_metric_server_host:
+        type: str
+        default: ''
+        description: host
+      proxmox_metric_server_port:
+        type: int
+        default: 443
+        description: port
+      proxmox_metric_server_protocol:
+        type: str
+        default: https
+        description: protocol
+        choices:
+          - https
+          - http
+      proxmox_metric_server_path:
+        type: str
+        default: /v1/metrics
+        description: path
+      proxmox_metric_server_headers:
+        type: dict
+        default: {}
+        description: headers
+        no_log: true
+      proxmox_metric_server_cluster:
+        type: str
+        default: ''
+        description: cluster
+      proxmox_metric_server_disabled:
+        type: bool
+        default: false
+        description: disabled
+      proxmox_metric_server_allow_insecure_http:
+        type: bool
+        default: false
+        description: allow insecure http

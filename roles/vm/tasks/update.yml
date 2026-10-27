@@ -1,0 +1,21 @@
+---
+- name: Update explicitly allowed scalar hardware attributes
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ _proxmox_config.api.host }}"
+    api_user: "{{ _proxmox_config.api.user }}"
+    api_password: "{{ _proxmox_config.api.password or omit }}"
+    api_token_id: "{{ _proxmox_config.api.token_id or omit }}"
+    api_token_secret: "{{ _proxmox_config.api.token_secret or omit }}"
+    validate_certs: "{{ _proxmox_config.api.validate_certs }}"
+    node: "{{ _proxmox_vm_state.node }}"
+    vmid: "{{ _proxmox_config.vm.vmid }}"
+    state: present
+    update: true
+    update_unsafe: false
+    cores: "{{ _proxmox_config.vm.hardware.cores }}"
+    memory: "{{ _proxmox_config.vm.hardware.memory }}"
+    sockets: "{{ _proxmox_config.vm.hardware.sockets }}"
+    cpu: "{{ _proxmox_config.vm.hardware.cpu }}"
+    onboot: "{{ _proxmox_config.vm.hardware.onboot }}"
+  delegate_to: localhost
+  no_log: true

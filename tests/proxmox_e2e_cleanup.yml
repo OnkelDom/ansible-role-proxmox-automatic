@@ -27,6 +27,29 @@
           PROXMOX_AUTOMATIC_API_TOKEN_ID plus PROXMOX_AUTOMATIC_API_TOKEN_SECRET before
           running the Proxmox E2E cleanup.
 
+    - name: Inspect all reserved E2E VM identities before cleanup
+      degitag.proxmox.vm_lifecycle:
+        api:
+          host: "{{ proxmox_e2e_api_host }}"
+          user: "{{ proxmox_e2e_api_user }}"
+          password: "{{ proxmox_e2e_api_password }}"
+          token_id: "{{ proxmox_e2e_api_token_id }}"
+          token_secret: "{{ proxmox_e2e_api_token_secret }}"
+          validate_certs: "{{ proxmox_e2e_api_validate_certs }}"
+        vmid: "{{ item.vmid }}"
+        name: "{{ item.fqdn }}"
+        node: "{{ proxmox_e2e_hypervisor }}"
+      loop: "{{ proxmox_e2e_hosts }}"
+      register: _proxmox_e2e_cleanup_identities
+
+    - name: Refuse cleanup of VMs without collection ownership markers
+      ansible.builtin.assert:
+        that:
+          - not item.exists or item.ready | default(false) or item.installing | default(false)
+      loop: "{{ _proxmox_e2e_cleanup_identities.results }}"
+      loop_control:
+        label: "{{ item.item.fqdn }}"
+
     - name: Remove HA resources for E2E VMs
       community.proxmox.proxmox_cluster_ha_resources:
         api_host: "{{ proxmox_e2e_api_host }}"
@@ -48,9 +71,24 @@
         api_token_id: "{{ proxmox_e2e_api_token_id | default(omit) }}"
         api_token_secret: "{{ proxmox_e2e_api_token_secret | default(omit) }}"
         validate_certs: "{{ proxmox_e2e_api_validate_certs }}"
-        name: "ha-group-{{ proxmox_e2e_hypervisor | regex_replace('\\..*$', '') }}"
+        name: lenmail-e2e
         state: absent
       failed_when: false
+
+    - name: Stop validated E2E VMs before deletion
+      community.proxmox.proxmox_kvm:
+        api_host: "{{ proxmox_e2e_api_host }}"
+        api_user: "{{ proxmox_e2e_api_user | default(omit) }}"
+        api_password: "{{ proxmox_e2e_api_password | default(omit) }}"
+        api_token_id: "{{ proxmox_e2e_api_token_id | default(omit) }}"
+        api_token_secret: "{{ proxmox_e2e_api_token_secret | default(omit) }}"
+        validate_certs: "{{ proxmox_e2e_api_validate_certs }}"
+        node: "{{ item.node }}"
+        vmid: "{{ item.item.vmid }}"
+        state: stopped
+      loop: "{{ _proxmox_e2e_cleanup_identities.results }}"
+      when: item.exists
+      no_log: true
 
     - name: Destroy E2E VMs
       community.proxmox.proxmox_kvm:
@@ -60,41 +98,13 @@
         api_token_id: "{{ proxmox_e2e_api_token_id | default(omit) }}"
         api_token_secret: "{{ proxmox_e2e_api_token_secret | default(omit) }}"
         validate_certs: "{{ proxmox_e2e_api_validate_certs }}"
-        node: "{{ proxmox_e2e_hypervisor }}"
-        vmid: "{{ item.vmid }}"
+        node: "{{ item.node }}"
+        vmid: "{{ item.item.vmid }}"
         state: absent
         purge: true
-      loop: "{{ proxmox_e2e_hosts }}"
-      failed_when: false
-
-    - name: Remove generated E2E ISOs from Proxmox storage
-      ansible.builtin.uri:
-        url: >-
-          https://{{ proxmox_e2e_api_host }}:8006/api2/json/nodes/{{ proxmox_e2e_hypervisor }}/storage/{{ proxmox_e2e_iso_storage }}/content/{{
-            (proxmox_e2e_iso_storage ~ ':iso/' ~
-            (
-              ('ks-' ~ item.fqdn)
-              if item.backend == 'rocky_kickstart'
-              else
-              ('preseed-' ~ item.fqdn)
-            ) ~ '.iso') | urlencode
-          }}
-        method: DELETE
-        headers: >-
-          {{
-            {'Authorization': 'PVEAPIToken=' ~ proxmox_e2e_api_token_id ~ '=' ~ proxmox_e2e_api_token_secret}
-            if proxmox_e2e_api_token_id | length > 0
-            else {}
-          }}
-        url_username: "{{ proxmox_e2e_api_user if proxmox_e2e_api_token_id | length == 0 else omit }}"
-        url_password: "{{ proxmox_e2e_api_password if proxmox_e2e_api_token_id | length == 0 else omit }}"
-        force_basic_auth: "{{ true if proxmox_e2e_api_token_id | length == 0 else omit }}"
-        validate_certs: "{{ proxmox_e2e_api_validate_certs }}"
-        status_code:
-          - 200
-          - 404
-      loop: "{{ proxmox_e2e_hosts }}"
-      failed_when: false
+      loop: "{{ _proxmox_e2e_cleanup_identities.results }}"
+      when: item.exists
+      no_log: true
 
     - name: Build local E2E cleanup path list
       ansible.builtin.set_fact:

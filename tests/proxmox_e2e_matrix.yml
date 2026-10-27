@@ -21,7 +21,7 @@ proxmox_e2e_hosts:
     vmid: 3015
     ip: 192.0.2.15
     vlanid: 3
-    expected_root_g: 11
+    expected_root_g: 12
     expected_log_g: 4
     expected_swap_g: 2
 
@@ -46,6 +46,6 @@ proxmox_e2e_hosts:
     vmid: 3017
     ip: 192.0.2.17
     vlanid: 3
-    expected_root_g: 11
+    expected_root_g: 12
     expected_log_g: 4
     expected_swap_g: 2

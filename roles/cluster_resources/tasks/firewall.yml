@@ -1,0 +1,12 @@
+---
+- name: Validate API and central firewall configuration before mutation
+  ansible.builtin.set_fact:
+    _proxmox_cluster_api: "{{ proxmox_api | degitag.proxmox.normalize_api }}"
+    _proxmox_cluster_firewall: "{{ proxmox_cluster_firewall | degitag.proxmox.validate_cluster_firewall }}"
+  no_log: true
+
+- name: Reconcile shared firewall policies independently of VM provisioning
+  degitag.proxmox.firewall:
+    api: "{{ _proxmox_cluster_api }}"
+    config: "{{ _proxmox_cluster_firewall }}"
+  delegate_to: localhost

@@ -1,0 +1,383 @@
+---
+argument_specs:
+  main:
+    short_description: Automated VM provisioning with unattended installer media on Proxmox VE
+    description: Compatibility entry point for degitag.proxmox.deploy with validated inventory normalization.
+    options:
+      proxmox_automatic_install_dependencies:
+        type: bool
+        description: Automatically install dependencies (xorriso, syslinux) on Ansible Controller
+      proxmox_automatic_installer_backend:
+        type: str
+        choices:
+          - rocky_kickstart
+          - debian13_preseed
+        description: Installer backend used to generate unattended installation media
+      proxmox_automatic_files_dir:
+        type: str
+        description: Path for generated Kickstart and Preseed files
+      proxmox_automatic_iso_dir:
+        type: str
+        description: Path for generated ISO files
+      proxmox_automatic_iso_build_dir:
+        type: str
+        description: Path for temporary ISO extraction and remastering workspaces
+      proxmox_automatic_iso_name:
+        type: str
+        description: Backward-compatible source installer ISO name (without .iso)
+      proxmox_automatic_source_iso_name:
+        type: str
+        description: Source installer ISO name (without .iso) used by the selected backend
+      proxmox_automatic_source_iso_path:
+        type: str
+        description: Optional absolute source ISO path on the controller for remastering workflows
+      proxmox_automatic_generated_iso_name:
+        type: str
+        description: Optional override for the generated backend-specific ISO name (without .iso)
+      proxmox_automatic_install_source:
+        type: str
+        choices:
+          - online
+          - cdrom
+        description: Controls whether the installer should use online repositories or only the attached installation
+          media. Debian cdrom mode assumes the ISO already contains the required packages.
+      proxmox_automatic_kickstart_template:
+        type: str
+        description: Template used for the Rocky Kickstart configuration
+      proxmox_automatic_preseed_template:
+        type: str
+        description: Template used for the Debian preseed configuration
+      proxmox_automatic_skip_iso_upload:
+        type: bool
+        description: Skip Proxmox ISO upload. Intended for controller-side tests.
+      proxmox_automatic_api_host:
+        type: str
+        description: FQDN or IP of the Proxmox API host
+      proxmox_automatic_api_user:
+        type: str
+        description: Username for Proxmox API
+      proxmox_automatic_api_password:
+        type: str
+        description: Password for Proxmox API
+        no_log: true
+      proxmox_automatic_api_validate_certs:
+        type: bool
+        description: Validate SSL certificates for Proxmox API connections
+      proxmox_automatic_vmid:
+        type: int
+        description: Proxmox VM ID
+      proxmox_automatic_hypervisor:
+        type: str
+        description: Proxmox Node (e.g. srv-hyp-01.local)
+      proxmox_automatic_memory:
+        type: int
+        description: VM RAM in MB
+      proxmox_automatic_vcpu:
+        type: int
+        description: Number of vCPUs
+      proxmox_automatic_cpu_type:
+        type: str
+        description: CPU type
+      proxmox_automatic_sockets:
+        type: int
+        description: Number of CPU sockets
+      proxmox_automatic_state:
+        type: str
+        choices:
+          - present
+          - absent
+        description: VM state
+      proxmox_automatic_kvm:
+        type: bool
+        description: Enable KVM
+      proxmox_automatic_os_type:
+        type: str
+        description: Operating system type
+      proxmox_automatic_onboot:
+        type: bool
+        description: Enable autostart
+      proxmox_automatic_scsi_hw:
+        type: str
+        description: SCSI controller type
+      proxmox_automatic_machine:
+        type: str
+        description: Machine type
+      proxmox_automatic_hotplug:
+        type: str
+        description: Hotplug configuration
+      proxmox_automatic_vga:
+        type: str
+        description: VGA configuration passed to Proxmox KVM, for example 'none' for GPU passthrough VMs
+      proxmox_automatic_hostpci:
+        type: dict
+        description: Host PCI passthrough device map passed to Proxmox KVM, keyed by hostpci slot
+      proxmox_automatic_storage:
+        type: str
+        description: 'Optional: Override storage for VM and ISO'
+      proxmox_automatic_pve_iso_storage:
+        type: str
+        description: Proxmox storage for ISOs
+      proxmox_automatic_pve_vm_storage:
+        type: str
+        description: Proxmox storage for VM disks
+      proxmox_automatic_first_disk_size:
+        type: str
+        description: Size of first disk in GB (number only)
+      proxmox_automatic_storage_config_defaults:
+        type: list
+        elements: dict
+        description: Default storage configuration for disks
+      proxmox_automatic_disks:
+        type: list
+        elements: dict
+        description: List of additional disks (name, size, storage)
+      proxmox_automatic_defaultbridge:
+        type: str
+        description: Default bridge for network cards
+      proxmox_automatic_networks:
+        type: list
+        elements: dict
+        description: List of additional network cards (bridge, vlanid, mtu, mac, model)
+      proxmox_automatic_dhcp_enabled:
+        type: bool
+        description: Enable DHCP for network configuration. When true, static IPs are ignored.
+      proxmox_automatic_dns_servers:
+        type: list
+        elements: str
+        description: List of DNS servers
+      proxmox_automatic_ipv6_enabled:
+        type: bool
+        description: Enable IPv6 support. When enabled, VMs will be configured with IPv6 addresses and routing.
+      proxmox_automatic_ipv6_dns_servers:
+        type: list
+        elements: str
+        description: List of IPv6 DNS servers (used when IPv6 is enabled)
+      proxmox_automatic_ipv6_sysctl_settings:
+        type: dict
+        description: Sysctl settings applied when IPv6 is enabled
+      proxmox_automatic_boot_order:
+        type: int
+        description: Boot order
+      proxmox_automatic_boot_order_up_wait:
+        type: int
+        description: Wait time after start (seconds)
+      proxmox_automatic_boot_order_down_wait:
+        type: int
+        description: Wait time after shutdown (seconds)
+      proxmox_automatic_timezone:
+        type: str
+        description: VM timezone
+      proxmox_automatic_language:
+        type: str
+        description: System language
+      proxmox_automatic_keyboard_layout:
+        type: str
+        description: Keyboard layout
+      proxmox_automatic_keyboard_variants:
+        type: str
+        description: Keyboard variants
+      proxmox_automatic_ntp_servers:
+        type: list
+        elements: str
+        description: List of NTP servers
+      proxmox_automatic_debian_suite:
+        type: str
+        description: Debian suite used by the Debian preseed backend
+      proxmox_automatic_debian_mirror:
+        type: str
+        description: Debian package mirror host
+      proxmox_automatic_debian_mirror_directory:
+        type: str
+        description: Debian package mirror directory
+      proxmox_automatic_debian_security_host:
+        type: str
+        description: Debian security mirror host
+      proxmox_automatic_debian_tasksel:
+        type: list
+        elements: str
+        description: Tasksel roles installed by the Debian preseed backend
+      proxmox_automatic_debian_packages_default:
+        type: list
+        elements: str
+        description: Backend-specific default package list for Debian preseed
+      proxmox_automatic_debian_interface_prefix:
+        type: str
+        description: Prefix used to derive Debian installer NIC names from netX definitions
+      proxmox_automatic_debian_interface_index_start:
+        type: int
+        description: Start index used to derive Debian installer NIC names from netX definitions
+      proxmox_automatic_debian_partition_recipe_override:
+        type: str
+        description: Optional raw Debian partman expert recipe override
+      proxmox_automatic_debian_late_command_extra:
+        type: list
+        elements: str
+        description: Additional raw commands appended to Debian preseed late_command
+      proxmox_automatic_debian_purge_microcode:
+        type: bool
+        description: Purge guest CPU microcode packages after Debian installation and rebuild initramfs and GRUB
+      proxmox_automatic_debian_disable_network_manager:
+        type: bool
+        description: Disable NetworkManager in Debian late_command when present
+      proxmox_automatic_debian_root_login:
+        type: bool
+        description: Enable direct root login during Debian installation
+      proxmox_automatic_selinux_mode:
+        type: str
+        choices:
+          - enforcing
+          - permissive
+          - disabled
+        description: SELinux mode
+      proxmox_automatic_firewall_enabled:
+        type: bool
+        description: Enable firewall
+      proxmox_automatic_firewall_services:
+        type: list
+        elements: str
+        description: Firewall services to allow
+      proxmox_automatic_ssh_port:
+        type: int
+        description: SSH port for the VM
+      proxmox_automatic_users:
+        type: list
+        elements: dict
+        description: List of users to be created during installation
+        no_log: true
+      proxmox_automatic_additional_hosts:
+        type: list
+        elements: dict
+        description: Additional hosts entries for /etc/hosts
+      proxmox_automatic_enabled_services:
+        type: list
+        elements: str
+        description: Services to enable at boot
+      proxmox_automatic_disabled_services:
+        type: list
+        elements: str
+        description: Services to disable
+      proxmox_automatic_packages_default:
+        type: list
+        elements: str
+        description: Optional backend-agnostic package override applied instead of backend defaults
+      proxmox_automatic_packages_additional:
+        type: list
+        elements: str
+        description: Additional packages (can be extended via group_vars/host_vars)
+      proxmox_automatic_package_retries:
+        type: int
+        description: Number of retries for package installation
+      proxmox_automatic_package_timeout:
+        type: int
+        description: Timeout for package installation (seconds)
+      proxmox_automatic_minimal_environment:
+        type: str
+        description: Minimal environment for installation
+      proxmox_automatic_install_languages:
+        type: str
+        description: Installed language packages
+      proxmox_automatic_repos:
+        type: list
+        elements: dict
+        description: List of additional repositories
+      proxmox_automatic_url_baseos:
+        type: str
+        description: BaseOS URL (optional)
+      proxmox_automatic_url_mirrorlist:
+        type: str
+        description: Mirrorlist URL for Rocky Linux BaseOS
+      proxmox_automatic_sysctl_settings:
+        type: dict
+        description: Sysctl settings for better network performance
+      proxmox_automatic_vm_pool:
+        type: str
+        description: Optional pool where the VM will be registered. Pool is automatically created if it doesn't
+          exist.
+      proxmox_automatic_create_vm_throttle:
+        type: int
+        description: Number of concurrent VM creations
+      proxmox_automatic_create_vm_retries:
+        type: int
+        description: Retries for VM creation
+      proxmox_automatic_create_vm_retry_delay:
+        type: int
+        description: Delay between retries (seconds)
+      proxmox_automatic_create_vm_pause:
+        type: int
+        description: Pause after VM creation (seconds)
+      proxmox_automatic_start_vm_throttle:
+        type: int
+        description: Number of concurrent VM starts
+      proxmox_automatic_start_vm_retries:
+        type: int
+        description: Retries for VM start
+      proxmox_automatic_start_vm_retry_delay:
+        type: int
+        description: Delay between start retries (seconds)
+      proxmox_automatic_start_vm_pause:
+        type: int
+        description: Pause after VM start (seconds)
+      proxmox_automatic_ha_enabled:
+        type: bool
+        description: Enable High Availability for this VM
+      proxmox_automatic_ha_group_manage:
+        type: bool
+        description: Automatically create/manage the Proxmox HA rule if it doesn't exist
+      proxmox_automatic_ha_group_auto:
+        type: bool
+        description: 'Automatically generate a shared HA rule per hypervisor (format: ha-group-<hypervisor>)'
+      proxmox_automatic_ha_group:
+        type: str
+        description: HA rule name to assign the VM to (auto-generated if empty and ha_group_auto is true)
+      proxmox_automatic_ha_group_nodes:
+        type: str
+        description: Comma-separated list of nodes with priorities (e.g., 'node1:0,node2:1,node3:2') for the shared
+          HA rule
+      proxmox_automatic_ha_group_restricted:
+        type: bool
+        description: If true, only resources in this HA rule can run on these nodes
+      proxmox_automatic_ha_group_comment:
+        type: str
+        description: Optional comment for the HA rule
+      proxmox_automatic_ha_state:
+        type: str
+        choices:
+          - started
+          - stopped
+          - disabled
+          - ignored
+        description: Desired state of the HA resource
+      proxmox_automatic_ha_max_restart:
+        type: int
+        description: Maximum number of restart attempts after a service start failure
+      proxmox_automatic_ha_max_relocate:
+        type: int
+        description: Maximum number of service relocation attempts when a service fails to start
+      proxmox_automatic_ha_comment:
+        type: str
+        description: Optional comment for the HA resource
+      proxmox_api:
+        type: dict
+        description: Structured api configuration; see README.
+        no_log: true
+      proxmox_vm:
+        type: dict
+        description: Structured vm configuration; see README.
+      proxmox_install:
+        type: dict
+        description: Structured install configuration; see README.
+      proxmox_guest:
+        type: dict
+        description: Structured guest configuration; see README.
+      proxmox_ha:
+        type: dict
+        description: Structured ha configuration; see README.
+      proxmox_firewall:
+        type: dict
+        description: Structured firewall configuration; see README.
+      proxmox_cluster_firewall:
+        type: dict
+        description: Structured cluster firewall configuration; see README.
+      proxmox_deploy:
+        type: dict
+        description: Structured deploy configuration; see README.

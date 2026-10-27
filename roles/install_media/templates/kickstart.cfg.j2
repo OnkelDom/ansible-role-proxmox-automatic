@@ -1,0 +1,279 @@
+
+# PRE-INSTALLATION SCRIPT
+%pre --interpreter=/usr/bin/bash --log=/root/anaconda-ks-pre.log
+%end
+
+# INSTALL USING CONFIGURABLE MODE
+text
+
+# KEYBOARDS, LANGUAGES, TIMEZONE
+keyboard --vckeymap={{ _proxmox_config.legacy.keyboard_layout }} --xlayouts='{{ _proxmox_config.legacy.keyboard_variants }}'
+lang {{ _proxmox_config.legacy.language }}
+timezone {{ _proxmox_config.legacy.timezone }} --utc
+{% if _proxmox_config.legacy.ntp_servers %}
+{% for ntp in _proxmox_config.legacy.ntp_servers %}
+timesource --ntp-server {{ ntp }}
+{% endfor %}
+{% endif %}
+
+# NETWORK, SELINUX, FIREWALL
+# Multi-interface network configuration with configurable interface naming
+{% if _proxmox_config.legacy.dhcp_enabled | bool %}
+network --bootproto=dhcp --device=enp6s18 --onboot=on --hostname={{ _proxmox_config.vm.name }}{% if _proxmox_config.legacy.ipv6_enabled %} --ipv6=auto{% endif %}
+
+{% else %}
+{%   for network in _proxmox_config.legacy.networks %}
+{%     set device = network.interface_name | default('enp6s' ~ (18 + (network.name | replace('net', '') | int))) %}
+{%     if network.name == 'net0' %}
+
+network --bootproto=static --device={{ device }} --onboot=on --activate --ip={{ network.ip }} --netmask={{ network.netmask }} {% if network.gateway is defined %}--gateway={{ network.gateway }} {% endif %}--nameserver={{ _proxmox_config.legacy.dns_servers | join(',') }}{% if _proxmox_config.legacy.ipv6_enabled and _proxmox_config.legacy.ipv6_dns_servers | length > 0 %},{{ _proxmox_config.legacy.ipv6_dns_servers | join(',') }}{% endif %} --hostname={{ _proxmox_config.vm.name }}{% if _proxmox_config.legacy.ipv6_enabled %}{% if network.ipv6 is defined %} --ipv6={{ network.ipv6 }}{% if network.ipv6_gateway is defined %} --ipv6gateway={{ network.ipv6_gateway }}{% endif %}{% else %} --ipv6=auto{% endif %}{% endif %}
+
+{%     else %}
+
+network --bootproto=static --device={{ device }} --onboot=on --activate --ip={{ network.ip }} --netmask={{ network.netmask }}{% if network.gateway is defined %} --gateway={{ network.gateway }}{% endif %}{% if _proxmox_config.legacy.ipv6_enabled %}{% if network.ipv6 is defined %} --ipv6={{ network.ipv6 }}{% if network.ipv6_gateway is defined %} --ipv6gateway={{ network.ipv6_gateway }}{% endif %}{% else %} --ipv6=auto{% endif %}{% endif %}
+
+{%     endif %}
+
+{%   endfor %}
+{% endif %}
+
+
+selinux --{{ _proxmox_config.legacy.selinux_mode }}
+
+{% if _proxmox_config.legacy.firewall_enabled %}
+firewall --enabled{% if _proxmox_config.guest.port | int != 22 %} --port={{ _proxmox_config.guest.port }}/tcp{% endif %}{% for service in _proxmox_config.legacy.firewall_services %} --service={{ service }}{% endfor %}
+{% else %}
+firewall --disabled
+{% endif %}
+
+firstboot --disable
+
+# DISKS, PARTITIONS, VOLUME GROUPS, LOGICAL VOLUMES
+# Storage configuration is now dynamic based on _proxmox_config.legacy.storage_config
+
+{% set boot_storage = _proxmox_config.legacy.storage_config | selectattr('bootloader', 'defined') | selectattr('bootloader') | first %}
+{% set all_disks = _proxmox_config.legacy.storage_config | selectattr('disk', 'defined') | map(attribute='disk') | list %}
+
+# Global disk configuration
+ignoredisk --only-use={{ all_disks | join(',') }}
+zerombr
+
+{% if boot_storage is defined %}
+bootloader --location=mbr --boot-drive={{ boot_storage.disk }} --append='rootdelay=300 console=ttyS0 no_timer_check crashkernel=auto'
+{% endif %}
+
+{% for storage in _proxmox_config.legacy.storage_config %}
+{% if storage.disk is defined %}
+# Storage device: {{ storage.name }} ({{ storage.disk }})
+
+# Clear and prepare disk {{ storage.disk }}
+clearpart --all --initlabel --disklabel=gpt --drives={{ storage.disk }}
+
+{% if storage.partitions is defined %}
+# Partitions for {{ storage.name }}
+{% for partition in storage.partitions %}
+{% if partition.type is defined and partition.type == 'pv' %}
+part {{ partition.name }}     --label={{ partition.name.replace('.', '_') }}  --size={{ partition.size }}{% if partition.grow is defined and partition.grow %}  --grow{% endif %}{% if partition.primary is defined and partition.primary %}         --asprimary{% endif %}  --ondisk={{ storage.disk }}
+
+{% else %}
+part {{ partition.mount }}   --label={{ partition.name }}      --size={{ partition.size }}{% if partition.fstype is defined %}  --fstype={{ partition.fstype }}{% endif %}{% if partition.primary is defined and partition.primary %}   --asprimary{% endif %}
+
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if storage.vg is defined %}
+# Volume Groups and Logical Volumes for {{ storage.name }}
+{% for vg in storage.vg %}
+{% set pv_name = storage.partitions | selectattr('type', 'defined') | selectattr('type', 'equalto', 'pv') | map(attribute='name') | first | default('pv.root') %}
+volgroup {{ vg.name }} {{ pv_name }}
+{% if vg.lv is defined %}
+{% for lv in vg.lv %}
+logvol {{ lv.mount }}  --label={{ lv.name }}      --size={{ lv.size }}{% if lv.fstype is defined %}  --fstype={{ lv.fstype }}{% endif %}{% if lv.grow is defined and lv.grow %}  --grow{% endif %} --vgname={{ vg.name }} --name={{ lv.name }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% else %}
+# Additional storage device: {{ storage.name }} (no disk mapping - PVE only)
+{% if storage.vg is defined %}
+# Additional Volume Groups for {{ storage.name }}
+{% for vg in storage.vg %}
+{% if vg.lv is defined %}
+{% for lv in vg.lv %}
+# Additional logical volume {{ lv.name }} will be created post-installation
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+# INSTALLATION SOURCE, EXTRA REPOSITOROIES, PACKAGE GROUPS, PACKAGES
+{% if _proxmox_config.legacy.install_source == 'cdrom' %}
+cdrom
+{% else %}
+{% if _proxmox_config.legacy.url_mirrorlist is defined and _proxmox_config.legacy.url_mirrorlist != "" %}
+url --mirrorlist={{ _proxmox_config.legacy.url_mirrorlist }}
+{% endif %}
+{% if _proxmox_config.legacy.url_baseos is defined and _proxmox_config.legacy.url_baseos != "" %}
+url --url={{ _proxmox_config.legacy.url_baseos }}
+{% endif %}
+
+{% for repo in _proxmox_config.legacy.repos %}
+repo --name={{ repo.name }}{% if repo.mirrorlist is defined %} --mirrorlist={{ repo.mirrorlist }}{% endif %}{% if repo.baseurl is defined %} --baseurl={{ repo.baseurl }}{% endif %}{% if repo.cost is defined %} --cost={{ repo.cost }}{% endif %}
+
+{% endfor %}
+{% endif %}
+
+# Remove `@guest-agents` group if this is not a VM.
+%packages --retries={{ _proxmox_config.legacy.package_retries }} --timeout={{ _proxmox_config.legacy.package_timeout }} --inst-langs={{ _proxmox_config.legacy.install_languages }}
+{{ _proxmox_config.legacy.minimal_environment }}
+openssh-server
+{% if _proxmox_config.guest.port | int != 22 %}
+policycoreutils-python-utils
+{% endif %}
+# Default packages (installed on all VMs)
+{% if _proxmox_config.legacy.packages_effective %}
+{{ _proxmox_config.legacy.packages_effective | join('\n') }}
+{% endif %}
+# Additional packages (host/group specific)
+{% if _proxmox_config.legacy.packages_additional %}
+{{ _proxmox_config.legacy.packages_additional | join('\n') }}
+{% endif %}
+%end
+
+# GROUPS, USERS, ENABLE SSH, FINISH INSTALL
+rootpw --lock
+
+# Create users from hierarchical configuration
+{% for user in _proxmox_config.legacy.users_merged | default(_proxmox_config.legacy.users) %}
+{%- set user_line = "user --name=" + user.name -%}
+{%- if user.password is defined and user.password != "" -%}
+  {%- set user_line = user_line + " --password='" + user.password + "'" -%}
+  {%- if user.password_encrypted is defined and user.password_encrypted -%}
+    {%- set user_line = user_line + " --iscrypted" -%}
+  {%- else -%}
+    {%- set user_line = user_line + " --plaintext" -%}
+  {%- endif -%}
+{%- endif -%}
+{%- if user.gecos is defined -%}
+  {%- set user_line = user_line + " --gecos='" + user.gecos + "'" -%}
+{%- endif -%}
+{%- if user.groups is defined and user.groups | length > 0 -%}
+  {%- set groups_str = user.groups | join(",") -%}
+  {%- set user_line = user_line + " --groups='" + groups_str + "'" -%}
+{%- endif -%}
+{%- if user.uid is defined -%}
+  {%- set user_line = user_line + " --uid=" + user.uid|string -%}
+{%- endif -%}
+{%- if user.gid is defined -%}
+  {%- set user_line = user_line + " --gid=" + user.gid|string -%}
+{%- endif %}
+{{ user_line }}
+{% if user.ssh_key is defined and user.ssh_key != "" %}
+sshkey --username={{ user.name }} '{{ user.ssh_key }}'
+{% endif %}
+{% endfor %}
+
+services --enabled='{{ _proxmox_config.legacy.enabled_services | join(",") }}'{% if _proxmox_config.legacy.disabled_services | length > 0 %} --disabled='{{ _proxmox_config.legacy.disabled_services | join(",") }}'{% endif %}
+
+{{ 'poweroff' if _proxmox_config.deploy.reinstall else 'reboot' }}
+
+# ENABLE EMERGENCY KERNEL DUMPS FOR DEBUGGING
+%addon com_redhat_kdump --reserve-mb=auto --enable
+%end
+
+# POST-INSTALLATION SCRIPT
+%post --interpreter=/usr/bin/bash --log=/root/anaconda-ks-post.log --erroronfail
+{% set net0_network = _proxmox_config.legacy.networks | selectattr("name", "equalto", "net0") | first | default(none) %}
+
+printf 'Port {{ _proxmox_config.guest.port }}\n' > /etc/ssh/sshd_config.d/10-proxmox-port.conf
+{% if _proxmox_config.guest.port | int != 22 and _proxmox_config.legacy.selinux_mode != 'disabled' %}
+semanage port -a -t ssh_port_t -p tcp {{ _proxmox_config.guest.port }} || semanage port -m -t ssh_port_t -p tcp {{ _proxmox_config.guest.port }}
+{% endif %}
+
+# Log start of post-installation
+echo "=== POST-INSTALLATION STARTED ===" >> /root/anaconda-ks-post.log
+echo "$(date): Starting post-installation configuration" >> /root/anaconda-ks-post.log
+
+# Create sudoers files for all users
+{% for user in _proxmox_config.legacy.users_merged | default(_proxmox_config.legacy.users) %}
+{% if user.sudo_commands is defined %}
+{% if user.sudo_nopasswd is defined and user.sudo_nopasswd %}
+/usr/bin/echo "{{ user.name }} ALL=(ALL) NOPASSWD: {{ user.sudo_commands }}" > /etc/sudoers.d/user_{{ user.name }}
+{% else %}
+/usr/bin/echo "{{ user.name }} ALL=(ALL) {{ user.sudo_commands }}" > /etc/sudoers.d/user_{{ user.name }}
+{% endif %}
+/usr/bin/chmod 440 /etc/sudoers.d/user_{{ user.name }}
+{% endif %}
+
+{% if user.additional_ssh_keys is defined and user.additional_ssh_keys | length > 0 %}
+# Add additional SSH keys for user {{ user.name }}
+{%   for sshkey in user.additional_ssh_keys %}
+{%     if sshkey != "" %}
+/usr/bin/echo "{{ sshkey }}" >> /home/{{ user.name }}/.ssh/authorized_keys
+{%     endif %}
+{%   endfor %}
+{% endif %}
+
+{% endfor %}
+
+# Configure chrony NTP servers if defined
+{% if _proxmox_config.legacy.ntp_servers %}
+# Remove all existing server lines from chrony.conf
+/usr/bin/sed -i '/^server /d' /etc/chrony.conf
+# Add new NTP servers
+{%   for ntp in _proxmox_config.legacy.ntp_servers %}
+/usr/bin/echo "server {{ ntp }} iburst" >> /etc/chrony.conf
+{%   endfor %}
+{% endif %}
+
+# Set sysctl entries for better networking performance
+{% if _proxmox_config.legacy.sysctl_settings %}
+{%   for key, value in _proxmox_config.legacy.sysctl_settings.items() %}
+/usr/bin/echo "{{ key }} = {{ value }}" >> /etc/sysctl.d/99-proxmox-automatic.conf
+{%   endfor %}
+{% endif%}
+
+# Set IPv6 sysctl entries if IPv6 is enabled
+{% if _proxmox_config.legacy.ipv6_enabled and _proxmox_config.legacy.ipv6_sysctl_settings %}
+{%   for key, value in _proxmox_config.legacy.ipv6_sysctl_settings.items() %}
+/usr/bin/echo "{{ key }} = {{ value }}" >> /etc/sysctl.d/99-proxmox-automatic-ipv6.conf
+{%   endfor %}
+{% endif%}
+
+# Create /etc/hosts from proxmox_automatic variables
+/usr/bin/cat > /etc/hosts << 'EOF'
+127.0.0.1      localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1            localhost6 localhost6.localdomain6 localhost6
+
+{% if not _proxmox_config.legacy.dhcp_enabled and _proxmox_config.legacy.networks %}
+{% set hostname_short = _proxmox_config.vm.name.split('.')[0] %}
+{% if net0_network and net0_network.ip is defined %}
+{% set host_ip = net0_network.ip %}
+{% set space = 16 - host_ip | length %}
+{{ host_ip }}{% for i in range(1, space,1) %} {% endfor %}{{ _proxmox_config.vm.name }} {{ hostname_short }}
+{% endif %}
+{% if _proxmox_config.legacy.ipv6_enabled and net0_network and net0_network.ipv6 is defined %}
+{% set host_ipv6 = net0_network.ipv6.split('/')[0] %}
+{% set space = 16 - host_ipv6 | length %}
+{{ host_ipv6 }}{% for i in range(1, space,1) %} {% endfor %}{{ _proxmox_config.vm.name }} {{ hostname_short }}
+{% endif %}
+{% endif %}
+
+{% if _proxmox_config.legacy.additional_hosts is defined and _proxmox_config.legacy.additional_hosts | length > 0 %}
+{% for host in _proxmox_config.legacy.additional_hosts %}
+{% set space = 16 - host.ip | length %}
+{{ host.ip }}{% for i in range(1, space,1) %} {% endfor %}{{ host.hostname + '.' + host.domain if host.domain is defined and host.domain != '' else host.hostname }} {{ host.hostname.split('.')[0] }}{% if host.aliases is defined %}{% for alias in host.aliases %} {{ alias }}{% endfor %}{% endif %}{% if host.comment is defined %} # {{ host.comment }}{% endif %}
+
+{% endfor %}
+{% endif %}
+EOF
+
+# Log completion of post-installation
+echo "=== POST-INSTALLATION COMPLETED ===" >> /root/anaconda-ks-post.log
+echo "$(date): Post-installation configuration finished successfully" >> /root/anaconda-ks-post.log
+
+%end

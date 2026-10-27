@@ -1,0 +1,68 @@
+---
+- name: Read installed operating system and mounts
+  ansible.builtin.setup:
+    gather_subset:
+      - min
+      - hardware
+      - network
+  register: _proxmox_guest_facts
+
+- name: Verify installed operating system matches requested backend
+  ansible.builtin.assert:
+    that:
+      - >-
+        (_proxmox_config.install.backend == 'debian13_preseed' and
+         _proxmox_guest_facts.ansible_facts.ansible_distribution == 'Debian' and
+         _proxmox_guest_facts.ansible_facts.ansible_distribution_major_version == '13') or
+        (_proxmox_config.install.backend == 'rocky_kickstart' and
+         _proxmox_guest_facts.ansible_facts.ansible_distribution == 'Rocky')
+    fail_msg: Guest operating system does not match the requested installer backend
+
+- name: Verify requested mountpoints exist
+  ansible.builtin.command:
+    argv:
+      - findmnt
+      - --mountpoint
+      - "{{ item }}"
+      - --noheadings
+  loop: >-
+    {{ (_proxmox_config.vm.disks | map(attribute='partitions', default=[]) | flatten |
+        selectattr('mount', 'defined') | map(attribute='mount') | list) +
+       (_proxmox_config.vm.disks | map(attribute='vg', default=[]) | flatten |
+        map(attribute='lv', default=[]) | flatten | selectattr('mount', 'defined') | map(attribute='mount') | list)
+       | reject('equalto', 'swap') | unique | list }}
+  changed_when: false
+
+- name: Verify configured static IPv4 addresses
+  ansible.builtin.assert:
+    that:
+      - item.ip in _proxmox_guest_facts.ansible_facts.ansible_all_ipv4_addresses
+    fail_msg: "Expected address {{ item.ip }} was not found in the installed guest"
+  loop: "{{ _proxmox_config.vm.networks }}"
+  when:
+    - not _proxmox_config.legacy.dhcp_enabled | bool
+    - item.ip is defined
+
+- name: Observe SSH source address for firewall management access validation
+  ansible.builtin.command:
+    argv: [printenv, SSH_CONNECTION]
+  become: false
+  changed_when: false
+  failed_when: false
+  register: _proxmox_guest_ssh_connection
+  when: _proxmox_config.firewall.pve_enabled or _proxmox_config.firewall.guest_enabled
+
+- name: Verify current management connection is covered by explicit management networks
+  ansible.builtin.assert:
+    that:
+      - _proxmox_guest_ssh_connection.stdout | degitag.proxmox.management_allows(_proxmox_config.firewall.management_sources)
+    fail_msg: management_sources must cover the SSH source address observed by the guest
+  when: _proxmox_config.firewall.pve_enabled or _proxmox_config.firewall.guest_enabled
+
+- name: Apply bounded post-installation guest configuration
+  ansible.builtin.include_tasks: configure.yml
+  when: _proxmox_config.deploy.configure_guest | bool
+
+- name: Apply optional guest firewall
+  ansible.builtin.include_tasks: firewall.yml
+  when: _proxmox_config.firewall.guest_enabled | bool

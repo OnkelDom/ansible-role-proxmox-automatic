@@ -1,0 +1,6 @@
+ansible-core>=2.19,<2.20
+ansible-lint>=26.0,<27
+requests>=2.32,<3
+PyYAML>=6,<7
+yamllint>=1.35,<2
+proxmoxer>=2.2,<3

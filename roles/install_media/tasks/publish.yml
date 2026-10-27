@@ -1,0 +1,40 @@
+---
+- name: Protect generated installer ISO
+  ansible.builtin.file:
+    path: "{{ _proxmox_config.install.iso_dir }}/{{ _proxmox_media_backend_generated_iso_name }}.iso"
+    mode: "0600"
+  delegate_to: localhost
+  when: not ansible_check_mode
+
+- name: Hash installer ISO
+  ansible.builtin.stat:
+    path: "{{ _proxmox_config.install.iso_dir }}/{{ _proxmox_media_backend_generated_iso_name }}.iso"
+    checksum_algorithm: sha256
+  register: _proxmox_media_final_stat
+  delegate_to: localhost
+
+- name: Record successful media build fingerprint
+  ansible.builtin.copy:
+    content: "{{ {'input': _proxmox_media_fingerprint, 'iso': _proxmox_media_final_stat.stat.checksum} | to_nice_json }}\n"
+    dest: "{{ _proxmox_config.install.iso_dir }}/{{ _proxmox_media_backend_generated_iso_name }}.manifest.json"
+    mode: "0600"
+  delegate_to: localhost
+  when: not ansible_check_mode
+
+- name: Set content-addressed remote artifact name
+  ansible.builtin.set_fact:
+    _proxmox_media_remote_name: >-
+      {{ ('ks' if _proxmox_config.install.backend == 'rocky_kickstart' else 'preseed') ~ '-' ~
+         _proxmox_config.vm.vmid ~ '-' ~ (_proxmox_media_final_stat.stat.checksum | default('check-mode')) }}
+
+- name: Upload installer and wait for Proxmox task completion
+  degitag.proxmox.iso_upload:
+    api: "{{ _proxmox_config.api }}"
+    node: "{{ _proxmox_config.vm.node }}"
+    storage: "{{ _proxmox_config.vm.iso_storage }}"
+    path: "{{ _proxmox_config.install.iso_dir }}/{{ _proxmox_media_backend_generated_iso_name }}.iso"
+    name: "{{ _proxmox_media_remote_name }}.iso"
+  delegate_to: localhost
+  when:
+    - not _proxmox_config.install.skip_upload | bool
+    - not ansible_check_mode

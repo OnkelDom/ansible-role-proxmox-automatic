@@ -23,3 +23,8 @@ rules:
 
 ignore: |
   *.md
+  .venv/
+  .collections/
+  .ci-roles/
+  .cache/
+  .e2e-live/

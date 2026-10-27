@@ -1,0 +1,32 @@
+---
+- name: Verify central firewall configuration is consistent within each cluster
+  ansible.builtin.assert:
+    that:
+      - hostvars[item]._proxmox_config.cluster_firewall == _proxmox_config.cluster_firewall
+    fail_msg: Central firewall configuration must be identical for all hosts using the same API host
+  loop: "{{ ansible_play_hosts }}"
+  when: hostvars[item]._proxmox_config.api.host == _proxmox_config.api.host
+
+- name: Reconcile central security groups, aliases, IP sets and explicit cluster rules
+  degitag.proxmox.firewall:
+    api: "{{ _proxmox_config.api }}"
+    config: "{{ _proxmox_config.cluster_firewall }}"
+  delegate_to: localhost
+  when: >-
+    inventory_hostname == (ansible_play_hosts | map('extract', hostvars, '_proxmox_config') |
+      selectattr('api.host', 'equalto', _proxmox_config.api.host) | map(attribute='inventory_name') | first)
+
+- name: Ensure requested VM pool exists
+  community.proxmox.proxmox_pool:
+    api_host: "{{ _proxmox_config.api.host }}"
+    api_user: "{{ _proxmox_config.api.user }}"
+    api_password: "{{ _proxmox_config.api.password or omit }}"
+    api_token_id: "{{ _proxmox_config.api.token_id or omit }}"
+    api_token_secret: "{{ _proxmox_config.api.token_secret or omit }}"
+    validate_certs: "{{ _proxmox_config.api.validate_certs }}"
+    poolid: "{{ _proxmox_config.vm.pool }}"
+    state: present
+  delegate_to: localhost
+  throttle: 1
+  when: _proxmox_config.vm.pool | length > 0
+  no_log: true

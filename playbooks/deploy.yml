@@ -1,0 +1,7 @@
+---
+- name: Deploy and verify Proxmox guests
+  hosts: proxmox_vms
+  gather_facts: false
+  strategy: linear
+  roles:
+    - degitag.proxmox.deploy

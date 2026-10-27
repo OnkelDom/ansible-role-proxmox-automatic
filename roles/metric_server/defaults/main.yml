@@ -1,0 +1,11 @@
+---
+proxmox_metric_server_name: monitoring-otlp
+proxmox_metric_server_state: present
+proxmox_metric_server_host: ''
+proxmox_metric_server_port: 443
+proxmox_metric_server_protocol: https
+proxmox_metric_server_path: /v1/metrics
+proxmox_metric_server_headers: {}
+proxmox_metric_server_cluster: ''
+proxmox_metric_server_disabled: false
+proxmox_metric_server_allow_insecure_http: false

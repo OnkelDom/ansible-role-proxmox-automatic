@@ -21,8 +21,8 @@ galaxy_info:
     - kvm
     - qemu
   license: MIT
-  min_ansible_version: '2.10'
-  namespace: lenmail
+  min_ansible_version: '2.19'
+  namespace: degitag
   platforms:
     - name: EL
       versions:

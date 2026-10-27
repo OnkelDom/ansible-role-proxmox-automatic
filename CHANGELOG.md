@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.0 — 2026-10-27
+
+- Collection `degitag.proxmox` mit Deploy-, Cluster-, Medien-, VM- und begrenzter Gastrolle.
+- Namespace auf `degitag` umgestellt; bestehende Firewall- und Installationsmarker bleiben kompatibel.
+- README mit Betriebswegen, zentraler Firewall, VM-Zuweisungen und Gast-nftables neu strukturiert.
+- Eigenständige Rolle für nativen PVE-OTLP-Metrikexport.
+- Strukturierte Konfiguration mit Legacy-Adapter, Validierung und Benutzer-Merge anhand des Namens.
+- Zentrale Sicherheitsgruppen, IP-Sets, Aliase, explizite Cluster-Regeln und VM-Gruppenreferenzen.
+- Optionale isolierte Gast-nftables-Policy mit Management-Zugriffsprüfung.
+- Regeln mit stabiler Identität, Erhalt fremder Regeln und lokalen Änderungsjournalen.
+- Inhaltsbasierter Mediencache, korrekte Passwort-API-Authentifizierung und Upload-Taskprüfung.
+- Prüfung vorhandener VM-Identität, bewusste Neuinstallation, Wiederaufnahme und Medienabschluss.
+- HA erst nach Gastprüfung; gemeinsame Regeln erhalten vorhandene Mitglieder.
+- Entfernte wirkungslose SMTP-/EPEL-/DNF- und Metadaten-Optionen; TLS-Prüfung standardmäßig aktiv.
+- Lokale Tests und Collection-Build; echte Proxmox-/Firewall-E2E-Abnahme weiterhin separat erforderlich.
+
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

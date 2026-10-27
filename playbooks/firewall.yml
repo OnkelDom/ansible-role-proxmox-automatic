@@ -1,0 +1,7 @@
+---
+# One inventory host per cluster. This path never creates or starts VMs.
+- name: Manage shared Proxmox security policies
+  hosts: proxmox_clusters
+  gather_facts: false
+  roles:
+    - degitag.proxmox.cluster_resources

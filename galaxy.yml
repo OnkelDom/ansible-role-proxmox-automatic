@@ -1,0 +1,30 @@
+---
+namespace: degitag
+name: proxmox
+version: 0.2.0
+readme: README.md
+authors:
+  - Lenmail Maintainers
+description: Proxmox unattended provisioning and centrally managed firewall policies
+license:
+  - MIT
+tags:
+  - proxmox
+  - infrastructure
+  - linux
+repository: https://github.com/OnkelDom/ansible-role-proxmox-automatic
+dependencies:
+  community.proxmox: '>=1.4.0,<3.0.0'
+  community.general: '>=12.0.0,<14.0.0'
+  ansible.posix: '>=2.1.0,<3.0.0'
+build_ignore:
+  - .git
+  - .collections
+  - .ci-roles
+  - .cache
+  - .ansible
+  - .proxmox-firewall-backups
+  - .venv
+  - .e2e-live
+  - '*.tar.gz'
+  - __pycache__

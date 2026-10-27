@@ -1,0 +1,262 @@
+---
+# Local Dependencies Installation
+# Set to true to automatically install required packages (xorriso, syslinux) on the Ansible controller
+proxmox_automatic_install_dependencies: false
+
+proxmox_automatic_installer_backend: "rocky_kickstart"
+proxmox_automatic_files_dir: "kickstart-files"
+proxmox_automatic_iso_dir: "kickstart-isos"
+proxmox_automatic_iso_build_dir: "{{ proxmox_automatic_iso_dir }}/build"
+# VM Deployment Configuration
+proxmox_automatic_first_disk_size: "20"  # IN GB
+proxmox_automatic_pve_iso_storage: "cephfs"
+proxmox_automatic_pve_vm_storage: "volumes"
+proxmox_automatic_defaultbridge: "vmbr1"
+proxmox_automatic_iso_name: "rocky9.6-ks"
+proxmox_automatic_source_iso_name: "{{ proxmox_automatic_iso_name }}"
+proxmox_automatic_source_iso_path: ""
+proxmox_automatic_generated_iso_name: ""
+proxmox_automatic_install_source: "online"
+proxmox_automatic_kickstart_template: "kickstart.cfg.j2"
+proxmox_automatic_preseed_template: "preseed.cfg.j2"
+proxmox_automatic_skip_iso_upload: false
+proxmox_automatic_efi_pre_enrolled_keys: "{{ proxmox_automatic_installer_backend != 'debian13_preseed' }}"
+proxmox_automatic_vga: std
+proxmox_automatic_hotplug: "network,disk,cpu,memory,usb"
+
+proxmox_automatic_debian_suite: "trixie"
+proxmox_automatic_debian_mirror: "deb.debian.org"
+proxmox_automatic_debian_mirror_directory: "/debian"
+proxmox_automatic_debian_security_host: "security.debian.org"
+proxmox_automatic_debian_tasksel: []
+proxmox_automatic_debian_packages_default:
+  - ca-certificates
+  - lvm2
+  - openssh-server
+  - qemu-guest-agent
+  - sudo
+  - vim
+  - xfsprogs
+proxmox_automatic_debian_interface_prefix: "ens"
+proxmox_automatic_debian_interface_index_start: 18
+proxmox_automatic_debian_partition_recipe_override: ""
+proxmox_automatic_debian_late_command_extra: []
+proxmox_automatic_debian_disable_network_manager: true
+proxmox_automatic_debian_root_login: false
+proxmox_automatic_debian_purge_microcode: true
+
+# Api Access
+proxmox_automatic_api_user: svc_ansible_rw@pam
+proxmox_automatic_api_password: "<filleme>"
+proxmox_automatic_api_validate_certs: true
+# Kickstart Configuration
+proxmox_automatic_timezone: "Europe/Berlin"
+proxmox_automatic_ntp_servers:
+  - "0.de.pool.ntp.org"
+  - "1.de.pool.ntp.org"
+  - "2.de.pool.ntp.org"
+  - "3.de.pool.ntp.org"
+proxmox_automatic_dns_servers:
+  - "1.0.0.1"
+  - "1.1.1.1"
+
+# IPv6 Configuration (optional)
+proxmox_automatic_ipv6_enabled: false
+proxmox_automatic_ipv6_dns_servers: []
+# Example:
+#  - "2606:4700:4700::1111"
+#  - "2606:4700:4700::1001"
+
+proxmox_automatic_ssh_port: 22
+proxmox_automatic_additional_hosts: []
+# Example:
+#  - ip: "192.168.1.20"
+#    hostname: "database01.example.com"
+#    comment: "Database Server"
+
+# High Availability (HA) Configuration
+proxmox_automatic_ha_enabled: true
+
+# HA Rule Management
+proxmox_automatic_ha_group_manage: true
+# Set to true to automatically create/manage the HA rule
+
+proxmox_automatic_ha_group_auto: true
+# If true, automatically generate HA rule name from hypervisor name
+# Format: "ha-group-<hypervisor>" (e.g., "ha-group-srv-hyp-01")
+
+proxmox_automatic_ha_group: ""
+# Example: "ha-group-01"
+# If empty and ha_group_auto is true, the HA rule name will be auto-generated
+
+proxmox_automatic_ha_group_nodes: ""
+# Example: "pve-node1:0,pve-node2:1,pve-node3:2"
+# Format: "node:priority" (lower priority = preferred node, converted internally for Proxmox HA rules)
+# If empty and ha_group_auto is true, nodes will be auto-generated from all hypervisors visible in the play
+
+proxmox_automatic_ha_group_restricted: false
+# If true, only resources in this HA rule can run on the specified nodes
+
+proxmox_automatic_ha_group_comment: ""
+# Optional comment for the HA rule
+
+# HA Resource Configuration
+proxmox_automatic_ha_state: "started"
+# Choices: "started", "stopped", "disabled", "ignored"
+
+proxmox_automatic_ha_max_restart: 1
+# Maximal number of tries to restart the service on a node after its start failed
+
+proxmox_automatic_ha_max_relocate: 1
+# Maximal number of service relocate tries when a service fails to start
+
+proxmox_automatic_ha_comment: ""
+# Optional comment for the HA resource
+
+proxmox_automatic_sysctl_settings:
+  net.ipv4.ip_forward: 1
+  net.ipv4.conf.all.rp_filter: 1
+  vm.swappiness: 10
+  vm.vfs_cache_pressure: 50
+
+# Optional IPv6 sysctl settings (applied when proxmox_automatic_ipv6_enabled is true)
+proxmox_automatic_ipv6_sysctl_settings:
+  net.ipv6.conf.all.forwarding: 1
+  net.ipv6.conf.all.accept_ra: 0
+  net.ipv6.conf.default.accept_ra: 0
+  net.ipv6.conf.all.accept_redirects: 0
+  net.ipv6.conf.default.accept_redirects: 0
+
+# System Configuration
+proxmox_automatic_keyboard_layout: "de"
+proxmox_automatic_keyboard_variants: "de (nodeadkeys),us"
+proxmox_automatic_language: "en_US.UTF-8"
+proxmox_automatic_selinux_mode: "enforcing"  # enforcing, permissive, disabled
+proxmox_automatic_firewall_enabled: true
+proxmox_automatic_firewall_services:
+  - "ssh"
+
+# System Services Configuration
+proxmox_automatic_enabled_services:
+  - "sshd"
+  - "rsyslog"
+  - "chronyd"
+  - "NetworkManager"
+proxmox_automatic_disabled_services: []
+
+# Boot and Installation Configuration
+proxmox_automatic_dhcp_enabled: false  # true for DHCP, false for static IP
+
+# Package Installation Configuration
+proxmox_automatic_package_retries: 5
+proxmox_automatic_package_timeout: 20
+proxmox_automatic_install_languages: "en"
+proxmox_automatic_minimal_environment: "@^minimal-environment"
+
+proxmox_automatic_vcpu: 2
+proxmox_automatic_memory: 2048  # IN MB
+proxmox_automatic_users: []
+
+proxmox_automatic_url_baseos: ""
+proxmox_automatic_url_mirrorlist: "http://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=BaseOS-9"
+proxmox_automatic_repos:
+  - name: baseos
+    mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=BaseOS-9
+  - name: appstream
+    mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=AppStream-9
+  - name: extras
+    mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=extras-9
+  - name: crb
+    mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=CRB-9
+
+
+# Storage configuration
+proxmox_automatic_storage_config_defaults:
+  - name: virtio0
+    size: "{{ proxmox_automatic_first_disk_size }}"
+    disk: vda
+    bootloader: true
+    partitions:
+      - name: efi
+        mount: /boot/efi
+        size: 1024
+        fstype: efi
+        primary: true
+      - name: boot
+        mount: /boot
+        size: 1024
+        fstype: ext4
+        primary: true
+      - name: pv.root
+        size: 1024
+        grow: true
+        primary: true
+        type: pv
+    vg:
+      - name: system
+        lv:
+          - name: root
+            mount: /
+            size: 1024
+            grow: true
+            fstype: xfs
+          - name: log
+            mount: /var/log
+            size: 4096
+            fstype: xfs
+          - name: swap
+            mount: swap
+            size: 2048
+            fstype: swap
+
+# Package Management
+# Default packages installed on all VMs (base system)
+proxmox_automatic_packages_default_rocky_kickstart:
+  - ca-certificates
+  - lvm2
+  - openssh-server
+  - qemu-guest-agent
+  - vim-enhanced
+  - xfsprogs
+
+proxmox_automatic_packages_default: []
+
+proxmox_automatic_packages_additional: []
+
+# Initialize empty network list for merging
+proxmox_automatic_networks: []
+
+proxmox_automatic_create_vm_throttle: 3
+# Number of retries if VM creation fails
+proxmox_automatic_create_vm_retries: 3
+# Delay between retries (seconds)
+proxmox_automatic_create_vm_retry_delay: 5
+# Pause after VM creation to reduce cluster load (seconds)
+proxmox_automatic_create_vm_pause: 3
+
+# VM Start Performance Tuning
+# Limit number of simultaneous VM starts (throttle)
+proxmox_automatic_start_vm_throttle: 3
+# Number of retries if VM start fails
+proxmox_automatic_start_vm_retries: 3
+# Delay between retries (seconds)
+proxmox_automatic_start_vm_retry_delay: 3
+# Pause after VM start to reduce cluster load (seconds)
+proxmox_automatic_start_vm_pause: 5
+
+# Structured API. Legacy variables remain accepted by the compatibility adapter.
+proxmox_api: {}
+proxmox_vm: {}
+proxmox_install: {}
+proxmox_guest: {}
+proxmox_ha: {}
+proxmox_firewall: {}
+proxmox_cluster_firewall: {}
+proxmox_deploy:
+  wait_for_install: true
+  configure_guest: true
+  detach_media: true
+  install_timeout: 3600
+  reinstall: false
+  update_hardware: false
+  cleanup_local_artifacts: false

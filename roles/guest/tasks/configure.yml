@@ -1,0 +1,92 @@
+---
+- name: Install requested guest packages
+  ansible.builtin.package:
+    name: "{{ _proxmox_config.guest.packages }}"
+    state: present
+    use: "{{ _proxmox_guest_facts.ansible_facts.ansible_pkg_mgr }}"
+  when:
+    - _proxmox_config.guest.manage_packages | bool
+    - _proxmox_config.guest.packages | length > 0
+
+- name: Ensure explicitly requested primary groups exist
+  ansible.builtin.group:
+    name: "{{ item.name }}"
+    gid: "{{ item.gid }}"
+    state: present
+  loop: "{{ _proxmox_config.guest.users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - _proxmox_config.guest.manage_users | bool
+    - item.state | default('present') == 'present'
+    - item.gid is defined
+
+- name: Manage guest accounts
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    state: "{{ item.state | default('present') }}"
+    shell: "{{ item.shell | default(omit) }}"
+    uid: "{{ item.uid | default(omit) }}"
+    group: "{{ item.name if item.gid is defined else omit }}"
+    groups: "{{ item.groups | default(omit) }}"
+    append: true
+    system: "{{ item.system_account | default(false) }}"
+    password: "{{ item.password if item.password_encrypted | default(false) else omit }}"
+  loop: "{{ _proxmox_config.guest.users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: _proxmox_config.guest.manage_users | bool
+  no_log: true
+
+- name: Manage guest authorized keys
+  ansible.posix.authorized_key:
+    user: "{{ item.name }}"
+    key: "{{ ([item.ssh_key | default('')] + (item.additional_ssh_keys | default([]))) | reject('equalto', '') | join('\n') }}"
+    state: present
+  loop: "{{ _proxmox_config.guest.users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - _proxmox_config.guest.manage_users | bool
+    - item.state | default('present') == 'present'
+    - item.ssh_key | default('') | length > 0 or item.additional_ssh_keys | default([]) | length > 0
+  no_log: true
+
+- name: Manage validated sudo policy
+  ansible.builtin.copy:
+    content: >-
+      {{ item.name }} ALL=(ALL) {{ 'NOPASSWD: ' if item.sudo_nopasswd | default(false) else '' }}{{ item.sudo_commands }}
+
+    dest: "/etc/sudoers.d/user_{{ item.name }}"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+  loop: "{{ _proxmox_config.guest.users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - _proxmox_config.guest.manage_users | bool
+    - item.state | default('present') == 'present'
+    - item.sudo_commands is defined
+
+- name: Remove obsolete managed sudo policy
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/user_{{ item.name }}"
+    state: absent
+  loop: "{{ _proxmox_config.guest.users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - _proxmox_config.guest.manage_users | bool
+    - item.state | default('present') == 'absent' or item.sudo_commands is not defined
+
+- name: Apply explicit guest sysctl values
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value | string }}"
+    sysctl_file: /etc/sysctl.d/99-proxmox-automatic.conf
+    state: present
+    reload: true
+  loop: "{{ _proxmox_config.guest.sysctl | dict2items }}"
+  when: _proxmox_config.guest.manage_sysctl | bool

@@ -1,0 +1,38 @@
+---
+- name: Verify live HA management before registering any resource
+  degitag.proxmox.ha_rules:
+    api: "{{ _proxmox_config.api }}"
+    profiles: "{{ _proxmox_ha_profiles }}"
+    validate_only: true
+    runtime_nodes: ["{{ _proxmox_config.vm.node }}"]
+  delegate_to: localhost
+  when: _proxmox_config.ha.enabled | bool
+
+- name: Register verified VM as HA resource
+  community.proxmox.proxmox_cluster_ha_resources:
+    api_host: "{{ _proxmox_config.api.host }}"
+    api_user: "{{ _proxmox_config.api.user }}"
+    api_password: "{{ _proxmox_config.api.password or omit }}"
+    api_token_id: "{{ _proxmox_config.api.token_id or omit }}"
+    api_token_secret: "{{ _proxmox_config.api.token_secret or omit }}"
+    validate_certs: "{{ _proxmox_config.api.validate_certs }}"
+    name: "vm:{{ _proxmox_config.vm.vmid }}"
+    hastate: "{{ _proxmox_config.ha.state }}"
+    max_restart: "{{ _proxmox_config.ha.max_restart }}"
+    max_relocate: "{{ _proxmox_config.ha.max_relocate }}"
+    comment: "{{ _proxmox_config.ha.comment or omit }}"
+    state: present
+  delegate_to: localhost
+  when: _proxmox_config.ha.enabled | bool
+  no_log: true
+
+- name: Reconcile shared HA profiles once per cluster
+  degitag.proxmox.ha_rules:
+    api: "{{ _proxmox_config.api }}"
+    profiles: >-
+      {{ ansible_play_hosts | map('extract', hostvars, '_proxmox_config') | list |
+         degitag.proxmox.cluster_plan(_proxmox_config.api.host) }}
+  delegate_to: localhost
+  when: >-
+    inventory_hostname == (ansible_play_hosts | map('extract', hostvars, '_proxmox_config') |
+      selectattr('api.host', 'equalto', _proxmox_config.api.host) | map(attribute='inventory_name') | first)

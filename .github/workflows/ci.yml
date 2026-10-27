@@ -7,6 +7,9 @@ name: CI
 
 jobs:
   validate:
+    strategy:
+      matrix:
+        python: ["3.11", "3.12"]
     runs-on: ubuntu-latest
 
     steps:
@@ -16,19 +19,19 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "${{ matrix.python }}"
 
       - name: Install system packages
         run: |
           sudo rm -f /etc/apt/sources.list.d/azure-cli.list
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
           sudo apt-get update
-          sudo apt-get install -y xorriso isolinux syslinux libarchive-tools
+          sudo apt-get install -y xorriso nftables
 
       - name: Install Python tooling
         run: |
           python -m pip install --upgrade pip
-          pip install ansible ansible-lint yamllint
+          pip install -r requirements-dev.txt
 
       - name: Install Ansible collections
         run: ansible-galaxy collection install -r collections/requirements.yml
@@ -42,3 +45,6 @@ jobs:
         env:
           ANSIBLE_ROLES_PATH: ${{ github.workspace }}/.ci-roles
         run: make ci
+
+      - name: Build and validate installable collection
+        run: make package-smoke

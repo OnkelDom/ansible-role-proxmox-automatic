@@ -1,0 +1,139 @@
+---
+- name: Validate normalized configuration without API access
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    proxmox_api:
+      host: pve.example.invalid
+      user: automation@pve
+      token_id: automation
+      token_secret: test-only-secret
+    proxmox_vm:
+      name: debian.example.invalid
+      vmid: 3011
+      node: pve01
+      networks:
+        - name: net0
+          bridge: vmbr0
+          vlanid: 30
+          ip: 192.0.2.11
+          netmask: 255.255.255.0
+          gateway: 192.0.2.1
+    proxmox_guest:
+      ssh_user: admin
+      users:
+        - name: admin
+          groups: [sudo]
+          ssh_key: ssh-ed25519 TEST
+          sudo_commands: ALL
+          sudo_nopasswd: true
+    proxmox_install:
+      backend: debian_preseed
+    proxmox_cluster_firewall:
+      ipsets:
+        - name: management
+          cidrs:
+            - cidr: 192.0.2.0/24
+      groups:
+        - name: webserver
+          rules:
+            - name: https
+              proto: tcp
+              dport: '443'
+    proxmox_firewall:
+      pve_enabled: true
+      guest_enabled: true
+      management_sources: [192.0.2.0/24, '2001:db8::/64']
+      groups: [webserver]
+      guest_rules:
+        - name: https
+          proto: tcp
+          dport: '443'
+  tasks:
+    - name: Normalize structured input
+      ansible.builtin.include_role:
+        name: degitag.proxmox.deploy
+        tasks_from: normalize_only
+    - name: Assert normalized values and separate host identity
+      ansible.builtin.assert:
+        that:
+          - _proxmox_config.vm.vmid == 3011
+          - _proxmox_config.install.backend == 'debian13_preseed'
+          - _proxmox_config.guest.host == '192.0.2.11'
+          - _proxmox_config.vm.name == 'debian.example.invalid'
+          - _proxmox_config.legacy.packages_effective | length > 0
+    - name: Set fixture media layout
+      ansible.builtin.set_fact:
+        _proxmox_media_primary_cdrom_iso: fixture
+        _proxmox_media_secondary_cdrom_iso: ''
+    - name: Exercise VM hardware composition without API access
+      ansible.builtin.include_role:
+        name: degitag.proxmox.vm
+        tasks_from: build
+    - name: Assert hardware and NIC firewall composition
+      ansible.builtin.assert:
+        that:
+          - "'firewall=1' in _proxmox_networks.net0"
+          - "'tag=30' in _proxmox_networks.net0"
+          - "',,' not in _proxmox_networks.net0"
+          - "'iothread=1' in _proxmox_disks.virtio0"
+          - "'ide3' not in _proxmox_media_drives"
+    - name: Allocate isolated render workspace
+      ansible.builtin.tempfile:
+        state: directory
+      register: _test_workspace
+    - name: Exercise current collection templates
+      block:
+        - name: Render new installer templates
+          ansible.builtin.template:
+            src: "{{ playbook_dir }}/../roles/install_media/templates/{{ item }}.cfg.j2"
+            dest: "{{ _test_workspace.path }}/{{ item }}.cfg"
+            mode: "0600"
+          loop: [preseed, kickstart]
+        - name: Render guest firewall with IPv4 and IPv6 management access
+          ansible.builtin.template:
+            src: "{{ playbook_dir }}/../roles/guest/templates/firewall.nft.j2"
+            dest: "{{ _test_workspace.path }}/firewall.nft"
+            mode: "0600"
+        - name: Render explicit reinstallation shutdown behavior
+          ansible.builtin.set_fact:
+            _test_original_config: "{{ _proxmox_config }}"
+            _proxmox_config: "{{ _proxmox_config | combine({'deploy': {'reinstall': true}}, recursive=true) }}"
+        - name: Verify both installers power off for explicit reinstallation
+          ansible.builtin.assert:
+            that:
+              - "lookup('template', '../roles/install_media/templates/kickstart.cfg.j2') is search('(?m)^poweroff$')"
+              - "'d-i debian-installer/exit/poweroff boolean true' in lookup('template', '../roles/install_media/templates/preseed.cfg.j2')"
+        - name: Restore normal deployment configuration
+          ansible.builtin.set_fact:
+            _proxmox_config: "{{ _test_original_config }}"
+        - name: Check whether nftables syntax validation is available
+          ansible.builtin.command:
+            argv: [nft, --version]
+          changed_when: false
+          failed_when: false
+          register: _test_nft_binary
+        - name: Validate nftables syntax on Linux CI without applying rules
+          ansible.builtin.command:
+            argv: [nft, --check, --file, "{{ _test_workspace.path }}/firewall.nft"]
+          become: true
+          changed_when: false
+          when: _test_nft_binary.rc == 0
+        - name: Read rendered firewall
+          ansible.builtin.slurp:
+            src: "{{ _test_workspace.path }}/firewall.nft"
+          register: _test_firewall
+        - name: Check guest policy and management exceptions
+          ansible.builtin.assert:
+            that:
+              - "'ip saddr 192.0.2.0/24 tcp dport 22 accept' in (_test_firewall.content | b64decode)"
+              - "'ip6 saddr 2001:db8::/64 tcp dport 22 accept' in (_test_firewall.content | b64decode)"
+              - "'tcp dport 443 accept' in (_test_firewall.content | b64decode)"
+              - "'comment \"https\"\n' in (_test_firewall.content | b64decode)"
+              - "'flush ruleset' not in (_test_firewall.content | b64decode)"
+      always:
+        - name: Remove render workspace
+          ansible.builtin.file:
+            path: "{{ _test_workspace.path }}"
+            state: absent

@@ -1,0 +1,217 @@
+---
+- name: "Create Debian preseed dependencies"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ _proxmox_config.install.files_dir }}"
+    - "{{ _proxmox_config.install.iso_dir }}"
+    - "{{ _proxmox_config.install.build_dir }}"
+  delegate_to: localhost
+
+- name: "Set Debian ISO names"
+  ansible.builtin.set_fact:
+    _proxmox_media_backend_source_iso_path: >-
+      {{
+        _proxmox_config.install.source_iso
+        if _proxmox_config.install.source_iso | length > 0
+        else _proxmox_config.install.iso_dir ~ '/' ~ _proxmox_config.install.source_iso_name ~ '.iso'
+      }}
+    _proxmox_media_backend_generated_iso_name: >-
+      {{
+        _proxmox_config.install.generated_iso_name
+        if _proxmox_config.install.generated_iso_name | length > 0
+        else 'preseed-' ~ _proxmox_config.vm.name
+      }}
+
+- name: "Ensure Debian source ISO is available on controller"
+  ansible.builtin.stat:
+    path: "{{ _proxmox_media_backend_source_iso_path }}"
+  register: _proxmox_media_source_iso_stat
+  delegate_to: localhost
+
+- name: "Fail if Debian source ISO is missing"
+  ansible.builtin.assert:
+    that:
+      - _proxmox_media_source_iso_stat.stat.exists
+      - _proxmox_media_source_iso_stat.stat.isreg
+    fail_msg: >-
+      Debian source ISO not found at '{{ _proxmox_media_backend_source_iso_path }}'.
+      Provide _proxmox_config.install.source_iso or place the ISO on the controller.
+  delegate_to: localhost
+
+- name: "Create Debian preseed file"
+  ansible.builtin.template:
+    src: "{{ _proxmox_config.install.preseed_template or 'preseed.cfg.j2' }}"
+    dest: "{{ _proxmox_config.install.files_dir }}/preseed-{{ _proxmox_config.vm.name }}.cfg"
+    mode: "0600"
+    force: true
+  delegate_to: localhost
+  no_log: true
+
+- name: Fingerprint installer inputs
+  ansible.builtin.include_tasks: fingerprint.yml
+
+- name: Build changed installer media
+  when: _proxmox_media_rebuild | bool and not ansible_check_mode
+  block:
+    - name: "Recreate Debian ISO build workspace"
+      ansible.builtin.file:
+        path: "{{ _proxmox_config.install.build_dir }}/{{ _proxmox_media_backend_generated_iso_name }}"
+        state: absent
+      delegate_to: localhost
+
+    - name: "Create Debian ISO build root"
+      ansible.builtin.file:
+        path: "{{ _proxmox_config.install.build_dir }}/{{ _proxmox_media_backend_generated_iso_name }}/root"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+
+    - name: "Extract Debian source ISO"
+      ansible.builtin.command:
+        argv:
+          - xorriso
+          - -osirrox
+          - 'on'
+          - -indev
+          - "{{ _proxmox_media_backend_source_iso_path }}"
+          - -extract
+          - /
+          - "{{ _proxmox_config.install.build_dir }}/{{ _proxmox_media_backend_generated_iso_name }}/root"
+      delegate_to: localhost
+      changed_when: true
+
+    - name: "Make extracted Debian ISO tree writable"
+      ansible.builtin.command:
+        argv:
+          - chmod
+          - -R
+          - u+w
+          - "{{ _proxmox_config.install.build_dir }}/{{ _proxmox_media_backend_generated_iso_name }}/root"
+      delegate_to: localhost
+      changed_when: true
+
+    - name: "Copy Debian preseed into ISO root"
+      ansible.builtin.copy:
+        src: "{{ _proxmox_config.install.files_dir }}/preseed-{{ _proxmox_config.vm.name }}.cfg"
+        dest: "{{ _proxmox_config.install.build_dir }}/{{ _proxmox_media_backend_generated_iso_name }}/root/preseed.cfg"
+        mode: "0600"
+      delegate_to: localhost
+
+    - name: "Inject preseed boot parameters into Debian ISO"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        root="{{ _proxmox_config.install.build_dir }}/{{ _proxmox_media_backend_generated_iso_name }}/root"
+        append_args="auto=true priority=critical firmware=never preseed/file=/cdrom/preseed.cfg debian-installer/locale={{ _proxmox_config.legacy.language }} keyboard-configuration/xkb-keymap={{ _proxmox_config.legacy.keyboard_layout }}"
+
+        if [ -f "$root/isolinux/txt.cfg" ]; then
+          if ! grep -q 'preseed/file=/cdrom/preseed.cfg' "$root/isolinux/txt.cfg"; then
+            APPEND_ARGS="$append_args" perl -0pi -e 's{(^\s*append\s+.*?)(\s+---(?:[^\n]*)?)$}{$1 . q{ } . $ENV{APPEND_ARGS} . $2}mge' "$root/isolinux/txt.cfg"
+          fi
+          if ! grep -q '^label auto$' "$root/isolinux/txt.cfg"; then
+            printf '\nlabel auto\n  menu label ^Automated install\n  menu default\n  kernel /install.amd/vmlinuz\n  append vga=788 initrd=/install.amd/initrd.gz %s ---\n' "$append_args" >> "$root/isolinux/txt.cfg"
+          fi
+        fi
+
+        if [ -f "$root/isolinux/isolinux.cfg" ]; then
+          perl -0pi -e 's/^timeout\s+.*/timeout 10/m' "$root/isolinux/isolinux.cfg"
+          if ! grep -q '^timeout ' "$root/isolinux/isolinux.cfg"; then
+            printf '\ntimeout 10\n' >> "$root/isolinux/isolinux.cfg"
+          fi
+          if grep -q '^ontimeout ' "$root/isolinux/isolinux.cfg"; then
+            perl -0pi -e 's/^ontimeout\s+.*/ontimeout auto/m' "$root/isolinux/isolinux.cfg"
+          else
+            printf 'ontimeout auto\n' >> "$root/isolinux/isolinux.cfg"
+          fi
+        fi
+
+        for grub_cfg in "$root/boot/grub/grub.cfg" "$root/boot/grub/loopback.cfg" "$root/grub/grub.cfg"; do
+          if [ -f "$grub_cfg" ]; then
+            if ! grep -q 'preseed/file=/cdrom/preseed.cfg' "$grub_cfg"; then
+              APPEND_ARGS="$append_args" perl -0pi -e 's{(^\s*linux\s+\S+.*?)(\s+---(?:[^\n]*)?)$}{$1 . q{ } . $ENV{APPEND_ARGS} . $2}mge' "$grub_cfg"
+            fi
+            if grep -q '^set timeout=' "$grub_cfg"; then
+              perl -0pi -e 's/^set timeout=.*/set timeout=1/m' "$grub_cfg"
+            else
+              tmp_grub_cfg="$(mktemp)"
+              printf 'set timeout=1\nset default=1\n' > "$tmp_grub_cfg"
+              cat "$grub_cfg" >> "$tmp_grub_cfg"
+              mv "$tmp_grub_cfg" "$grub_cfg"
+            fi
+            if grep -q '^set default=' "$grub_cfg"; then
+              perl -0pi -e 's/^set default=.*/set default=1/m' "$grub_cfg"
+            else
+              tmp_grub_cfg="$(mktemp)"
+              printf 'set default=1\n' > "$tmp_grub_cfg"
+              cat "$grub_cfg" >> "$tmp_grub_cfg"
+              mv "$tmp_grub_cfg" "$grub_cfg"
+            fi
+          fi
+        done
+      args:
+        executable: /bin/bash
+      delegate_to: localhost
+      changed_when: true
+
+    - name: Refresh ISO file checksums after injecting preseed and boot parameters
+      ansible.builtin.shell: |
+        set -euo pipefail
+        ROOT={{ (_proxmox_config.install.build_dir ~ '/' ~ _proxmox_media_backend_generated_iso_name ~ '/root') | quote }} python3 - <<'PYTHON'
+        import hashlib
+        import os
+        from pathlib import Path
+        root = Path(os.environ['ROOT'])
+        with (root / 'md5sum.txt').open('w') as manifest:
+            for path in sorted(root.rglob('*')):
+                relative = path.relative_to(root).as_posix()
+                if path.is_file() and not path.is_symlink() and relative not in ('md5sum.txt', 'isolinux/boot.cat'):
+                    with path.open('rb') as stream:
+                        digest = hashlib.file_digest(stream, 'md5').hexdigest()
+                    manifest.write(digest + '  ./' + relative + '\n')
+        PYTHON
+      args:
+        executable: /bin/bash
+      delegate_to: localhost
+      changed_when: true
+
+    - name: Remove outdated generated ISO before remastering
+      ansible.builtin.file:
+        path: "{{ _proxmox_config.install.iso_dir }}/{{ _proxmox_media_backend_generated_iso_name }}.iso"
+        state: absent
+      delegate_to: localhost
+
+    - name: Build remastered Debian ISO preserving original BIOS and EFI boot metadata
+      ansible.builtin.command:
+        argv:
+          - xorriso
+          - -indev
+          - "{{ _proxmox_media_backend_source_iso_path }}"
+          - -outdev
+          - "{{ _proxmox_config.install.iso_dir }}/{{ _proxmox_media_backend_generated_iso_name }}.iso"
+          - -map
+          - "{{ _proxmox_config.install.build_dir }}/{{ _proxmox_media_backend_generated_iso_name }}/root"
+          - /
+          - -boot_image
+          - any
+          - replay
+      delegate_to: localhost
+      changed_when: true
+
+  always:
+    - name: Remove sensitive extracted installer workspace
+      ansible.builtin.file:
+        path: "{{ _proxmox_config.install.build_dir }}/{{ _proxmox_media_backend_generated_iso_name }}"
+        state: absent
+      delegate_to: localhost
+      when: not ansible_check_mode
+
+
+- name: Publish installer artifact
+  ansible.builtin.include_tasks: publish.yml
+
+- name: "Set Debian VM media layout"
+  ansible.builtin.set_fact:
+    _proxmox_media_primary_cdrom_iso: "{{ _proxmox_media_remote_name }}"
+    _proxmox_media_secondary_cdrom_iso: ""

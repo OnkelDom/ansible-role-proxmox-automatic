@@ -1,0 +1,20 @@
+---
+- name: Configure existing guests independently of provisioning
+  hosts: proxmox_vms
+  gather_facts: false
+  tasks:
+    - name: Load deployment defaults without overwriting inventory
+      ansible.builtin.include_role:
+        name: degitag.proxmox.deploy
+        tasks_from: normalize_only
+    - name: Apply guest configuration
+      ansible.builtin.include_role:
+        name: degitag.proxmox.guest
+        apply:
+          delegate_to: "{{ _proxmox_config.guest.host }}"
+          become: true
+      vars:
+        _proxmox_config: "{{ hostvars[inventory_hostname]['_proxmox_config'] }}"
+        ansible_connection: ssh
+        ansible_user: "{{ hostvars[inventory_hostname]['_proxmox_config'].guest.ssh_user }}"
+        ansible_port: "{{ hostvars[inventory_hostname]['_proxmox_config'].guest.port }}"

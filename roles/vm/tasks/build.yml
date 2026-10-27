@@ -1,0 +1,32 @@
+---
+- name: Build VM hardware configuration
+  ansible.builtin.set_fact:
+    _proxmox_disks: {}
+    _proxmox_networks: {}
+    _proxmox_media_drives: >-
+      {{ {'ide2': _proxmox_config.vm.iso_storage ~ ':iso/' ~ _proxmox_media_primary_cdrom_iso ~ '.iso,media=cdrom'}
+         | combine({'ide3': _proxmox_config.vm.iso_storage ~ ':iso/' ~ _proxmox_media_secondary_cdrom_iso ~ '.iso,media=cdrom'}
+           if _proxmox_media_secondary_cdrom_iso | default('') | length > 0 else {}) }}
+
+- name: Build VirtIO disks
+  ansible.builtin.set_fact:
+    _proxmox_disks: >-
+      {{ _proxmox_disks | combine({item.name: _proxmox_config.vm.disk_storage ~ ':' ~ item.size ~
+         ',iothread=' ~ (item.pve_options.iothread | default(1) | int) ~
+         (',discard=' ~ item.pve_options.discard if (item.pve_options | default({})).discard is defined else '') ~
+         (',cache=' ~ item.pve_options.cache if (item.pve_options | default({})).cache is defined else '') ~
+         (',backup=' ~ (item.pve_options.backup | int) if (item.pve_options | default({})).backup is defined else '') ~
+         (',replicate=' ~ (item.pve_options.replicate | int) if (item.pve_options | default({})).replicate is defined else '') ~
+         (',ssd=' ~ (item.pve_options.ssd | int) if (item.pve_options | default({})).ssd is defined else '')}) }}
+  loop: "{{ _proxmox_config.vm.disks }}"
+
+- name: Build VirtIO networks
+  ansible.builtin.set_fact:
+    _proxmox_networks: >-
+      {{ _proxmox_networks | combine({item.name: 'virtio' ~ ('=' ~ item.mac if item.mac | default('') else '') ~
+         ',bridge=' ~ (item.bridge | default(_proxmox_config.legacy.defaultbridge)) ~
+         (',tag=' ~ item.vlanid if item.vlanid | default(0) | int > 0 else '') ~
+         (',mtu=' ~ item.mtu if item.mtu is defined else '') ~
+         (',rate=' ~ item.rate if item.rate is defined else '') ~
+         ',firewall=' ~ (_proxmox_config.firewall.pve_enabled | int)}) }}
+  loop: "{{ _proxmox_config.vm.networks }}"
