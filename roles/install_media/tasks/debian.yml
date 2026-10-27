@@ -182,20 +182,41 @@
         state: absent
       delegate_to: localhost
 
+    - name: Inspect installer configuration files to replace in the source ISO
+      ansible.builtin.stat:
+        path: "{{ _proxmox_config.install.build_dir }}/{{ _proxmox_media_backend_generated_iso_name }}/root/{{ item }}"
+      loop:
+        - preseed.cfg
+        - md5sum.txt
+        - isolinux/txt.cfg
+        - isolinux/isolinux.cfg
+        - boot/grub/grub.cfg
+        - boot/grub/loopback.cfg
+        - grub/grub.cfg
+      register: _proxmox_media_iso_updates
+      delegate_to: localhost
+
+    # Replacing the whole tree detaches loaded El Torito boot images in xorriso 1.5.6.
+    # Map only configuration files so the original BIOS/EFI objects remain available.
+    - name: Initialize targeted Debian ISO update arguments
+      ansible.builtin.set_fact:
+        _proxmox_media_iso_map_args: []
+
+    - name: Add existing installer configuration files to the ISO update
+      ansible.builtin.set_fact:
+        _proxmox_media_iso_map_args: >-
+          {{ _proxmox_media_iso_map_args + ['-map', item.stat.path, '/' ~ item.item] }}
+      loop: "{{ _proxmox_media_iso_updates.results }}"
+      when: item.stat.isreg | default(false)
+      loop_control:
+        label: "{{ item.item }}"
+
     - name: Build remastered Debian ISO preserving original BIOS and EFI boot metadata
       ansible.builtin.command:
-        argv:
-          - xorriso
-          - -indev
-          - "{{ _proxmox_media_backend_source_iso_path }}"
-          - -outdev
-          - "{{ _proxmox_config.install.iso_dir }}/{{ _proxmox_media_backend_generated_iso_name }}.iso"
-          - -map
-          - "{{ _proxmox_config.install.build_dir }}/{{ _proxmox_media_backend_generated_iso_name }}/root"
-          - /
-          - -boot_image
-          - any
-          - replay
+        argv: >-
+          {{ ['xorriso', '-indev', _proxmox_media_backend_source_iso_path,
+              '-outdev', _proxmox_config.install.iso_dir ~ '/' ~ _proxmox_media_backend_generated_iso_name ~ '.iso']
+             + _proxmox_media_iso_map_args + ['-boot_image', 'any', 'replay'] }}
       delegate_to: localhost
       changed_when: true
 

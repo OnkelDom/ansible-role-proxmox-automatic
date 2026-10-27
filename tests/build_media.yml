@@ -304,6 +304,25 @@
           -extract / {{ proxmox_automatic_test_workspace.path | quote }}/debian-remastered-root
       changed_when: false
 
+    - name: Read remastered Debian El Torito boot entries
+      ansible.builtin.command:
+        argv:
+          - xorriso
+          - -indev
+          - "{{ proxmox_automatic_iso_dir }}/debian13-test-{{ ansible_host }}.iso"
+          - -report_el_torito
+          - plain
+      register: proxmox_automatic_debian_boot_report
+      changed_when: false
+
+    - name: Assert remastered Debian ISO retains BIOS and UEFI boot images
+      ansible.builtin.assert:
+        that:
+          - proxmox_automatic_debian_boot_report.stdout is search('El Torito boot img :\\s+1\\s+BIOS')
+          - proxmox_automatic_debian_boot_report.stdout is search('El Torito boot img :\\s+2\\s+UEFI')
+          - proxmox_automatic_debian_boot_report.stdout is search('/isolinux/isolinux.bin')
+          - proxmox_automatic_debian_boot_report.stdout is search('/boot/grub/efi.img')
+
     - name: Assert remastered Debian ISO extracted preseed exists
       ansible.builtin.stat:
         path: "{{ proxmox_automatic_test_workspace.path }}/debian-remastered-root/preseed.cfg"

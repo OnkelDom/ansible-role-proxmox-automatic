@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Debian-Remaster ersetzt nur Installer-Konfigurationen und erhält Bootdateien für xorriso 1.5.6.
+- Medien-Tests prüfen den Erhalt beider El-Torito-Booteinträge für BIOS und UEFI.
+
 ## 0.2.0 — 2026-10-27
 
 - Collection `degitag.proxmox` mit Deploy-, Cluster-, Medien-, VM- und begrenzter Gastrolle.
