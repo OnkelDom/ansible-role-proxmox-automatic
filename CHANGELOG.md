@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- PR #2: lokaler Beispielrollen-Link und Lint-/Ignore-Regeln in die Collection-Struktur integriert.
+
 - Debian-Remaster ersetzt nur Installer-Konfigurationen und erhält Bootdateien für xorriso 1.5.6.
 - Medien-Tests prüfen den Erhalt beider El-Torito-Booteinträge für BIOS und UEFI.
 

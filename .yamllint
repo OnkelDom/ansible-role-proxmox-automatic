@@ -26,5 +26,6 @@ ignore: |
   .venv/
   .collections/
   .ci-roles/
+  examples/roles/
   .cache/
   .e2e-live/

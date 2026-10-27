@@ -54,6 +54,7 @@ htmlcov/
 .nox/
 
 # Ansible Galaxy
+collections/ansible_collections/
 
 # Generated files during role execution
 playbooks/kickstart-files/

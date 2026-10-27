@@ -21,6 +21,7 @@ build_ignore:
   - .git
   - .collections
   - .ci-roles
+  - examples/roles
   - .cache
   - .ansible
   - .proxmox-firewall-backups

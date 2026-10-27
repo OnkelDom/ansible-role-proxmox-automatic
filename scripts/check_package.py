@@ -14,6 +14,8 @@ with tarfile.open(artifact) as archive:
     forbidden = {'.venv', '.git', '.ansible', '.collections', '.proxmox-firewall-backups', '.e2e-live'}
     if any(forbidden & set(name.split('/')) for name in archive.getnames()):
         raise SystemExit('Development caches or firewall backups leaked into the package')
+    if any(name.startswith('examples/roles/') for name in archive.getnames()):
+        raise SystemExit('Local example role symlinks leaked into the package')
 with tempfile.TemporaryDirectory(prefix='proxmox-package-smoke-') as directory:
     workspace = Path(directory)
     target = workspace / 'collections'
