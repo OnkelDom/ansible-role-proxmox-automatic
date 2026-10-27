@@ -2,7 +2,7 @@
 - name: Require a stable cluster identity
   ansible.builtin.assert:
     that:
-      - proxmox_metric_server_state == 'absent' or proxmox_metric_server_cluster | length > 0
+    - proxmox_metric_server_state == 'absent' or proxmox_metric_server_cluster | length > 0
     fail_msg: Provide a globally unique cluster identity, including for standalone nodes.
 - name: Reconcile the cluster-wide native metric server
   degitag.proxmox.metric_server:

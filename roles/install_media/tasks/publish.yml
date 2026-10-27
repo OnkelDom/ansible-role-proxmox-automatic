@@ -36,5 +36,5 @@
     name: "{{ _proxmox_media_remote_name }}.iso"
   delegate_to: localhost
   when:
-    - not _proxmox_config.install.skip_upload | bool
-    - not ansible_check_mode
+  - not _proxmox_config.install.skip_upload | bool
+  - not ansible_check_mode

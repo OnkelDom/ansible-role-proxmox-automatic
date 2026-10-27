@@ -1,0 +1,7 @@
+---
+galaxy_info:
+  author: Lenmail Maintainers
+  description: VM-Lifecycle verwalten
+  license: MIT
+  min_ansible_version: '2.20'
+dependencies: []

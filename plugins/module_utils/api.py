@@ -2,7 +2,10 @@
 from urllib.parse import quote
 import time
 
-import requests
+try:
+    import requests
+except ImportError:
+    requests = None
 
 
 AUTH_SPEC = {
@@ -24,6 +27,8 @@ def segment(value):
 
 class ProxmoxAPI:
     def __init__(self, params):
+        if requests is None:
+            raise RuntimeError('The requests Python library is required in the interpreter executing the Proxmox module')
         self.params = params
         self.session = requests.Session()
         self.session.verify = params['validate_certs']

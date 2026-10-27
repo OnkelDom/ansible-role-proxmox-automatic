@@ -4,7 +4,7 @@
   connection: local
   gather_facts: true
   vars_files:
-    - ../defaults/main.yml
+  - ../defaults/main.yml
   vars:
     ansible_host: "swarm01.lenmail.de"
     proxmox_automatic_skip_iso_upload: true
@@ -15,369 +15,369 @@
     proxmox_automatic_keyboard_layout: "de"
     proxmox_automatic_keyboard_variants: "de (nodeadkeys),us"
     proxmox_automatic_networks:
-      - name: net0
-        bridge: vmbr0
-        vlanid: 30
-        ip: "192.0.2.11"
-        netmask: "255.255.255.0"
-        gateway: "192.0.2.1"
+    - name: net0
+      bridge: vmbr0
+      vlanid: 30
+      ip: "192.0.2.11"
+      netmask: "255.255.255.0"
+      gateway: "192.0.2.1"
     proxmox_automatic_storage_config:
-      - name: virtio0
-        size: "32"
-        disk: vda
-        bootloader: true
-        partitions:
-          - name: efi
-            mount: /boot/efi
-            size: 1024
-            fstype: efi
-            primary: true
-          - name: boot
-            mount: /boot
-            size: 1024
-            fstype: ext4
-            primary: true
-          - name: pv.root
-            size: 1024
-            grow: true
-            primary: true
-            type: pv
-        vg:
-          - name: system
-            lv:
-              - name: root
-                mount: /
-                size: 12288
-                fstype: xfs
-              - name: swap
-                mount: swap
-                size: 2048
-                fstype: swap
+    - name: virtio0
+      size: "32"
+      disk: vda
+      bootloader: true
+      partitions:
+      - name: efi
+        mount: /boot/efi
+        size: 1024
+        fstype: efi
+        primary: true
+      - name: boot
+        mount: /boot
+        size: 1024
+        fstype: ext4
+        primary: true
+      - name: pv.root
+        size: 1024
+        grow: true
+        primary: true
+        type: pv
+      vg:
+      - name: system
+        lv:
+        - name: root
+          mount: /
+          size: 12288
+          fstype: xfs
+        - name: swap
+          mount: swap
+          size: 2048
+          fstype: swap
     proxmox_automatic_users:
-      - name: "litsadmin"
-        fullname: "LITS Admin"
-        gecos: "LITS Admin"
-        shell: "/bin/bash"
-        uid: 1000
-        gid: 1000
-        groups:
-          - sudo
-        password: "$6$example"
-        password_encrypted: true
-        sudo_commands: "ALL"
-        sudo_nopasswd: true
-        ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey ops@example.com"
-        additional_ssh_keys:
-          - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCTestSecondary ops@example.com"
+    - name: "litsadmin"
+      fullname: "LITS Admin"
+      gecos: "LITS Admin"
+      shell: "/bin/bash"
+      uid: 1000
+      gid: 1000
+      groups:
+      - sudo
+      password: "$6$example"
+      password_encrypted: true
+      sudo_commands: "ALL"
+      sudo_nopasswd: true
+      ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey ops@example.com"
+      additional_ssh_keys:
+      - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCTestSecondary ops@example.com"
     proxmox_automatic_api_host: "pve.example.invalid"
     proxmox_automatic_api_user: "svc_ansible_rw@pam"
     proxmox_automatic_api_password: "unused"
     proxmox_automatic_hypervisor: "pve-node1.example.invalid"
   tasks:
-    - name: Check required ISO tooling
-      ansible.builtin.command: "{{ item }}"
-      loop:
-        - "xorriso --version"
-      changed_when: false
+  - name: Check required ISO tooling
+    ansible.builtin.command: "{{ item }}"
+    loop:
+    - "xorriso --version"
+    changed_when: false
 
-    - name: Create test workspace
-      ansible.builtin.tempfile:
-        state: directory
-        suffix: "proxmox media tests"
-      register: proxmox_automatic_test_workspace
+  - name: Create test workspace
+    ansible.builtin.tempfile:
+      state: directory
+      suffix: "proxmox media tests"
+    register: proxmox_automatic_test_workspace
 
-    - name: Set workspace paths
-      ansible.builtin.set_fact:
-        proxmox_automatic_files_dir: "{{ proxmox_automatic_test_workspace.path }}/files"
-        proxmox_automatic_skip_iso_upload: true
-        proxmox_automatic_iso_dir: "{{ proxmox_automatic_test_workspace.path }}/iso"
-        proxmox_automatic_iso_build_dir: "{{ proxmox_automatic_test_workspace.path }}/build"
+  - name: Set workspace paths
+    ansible.builtin.set_fact:
+      proxmox_automatic_files_dir: "{{ proxmox_automatic_test_workspace.path }}/files"
+      proxmox_automatic_skip_iso_upload: true
+      proxmox_automatic_iso_dir: "{{ proxmox_automatic_test_workspace.path }}/iso"
+      proxmox_automatic_iso_build_dir: "{{ proxmox_automatic_test_workspace.path }}/build"
 
-    - name: Set effective Rocky package list
-      ansible.builtin.set_fact:
-        proxmox_automatic_packages_effective: "{{ proxmox_automatic_packages_default_rocky_kickstart }}"
+  - name: Set effective Rocky package list
+    ansible.builtin.set_fact:
+      proxmox_automatic_packages_effective: "{{ proxmox_automatic_packages_default_rocky_kickstart }}"
 
-    - name: Run Rocky media generation role tasks
-      ansible.builtin.include_role:
-        name: proxmox_automatic
-        tasks_from: create_kickstart.yml
-      vars:
-        proxmox_automatic_skip_iso_upload: true
+  - name: Run Rocky media generation role tasks
+    ansible.builtin.include_role:
+      name: proxmox_automatic
+      tasks_from: create_kickstart.yml
+    vars:
+      proxmox_automatic_skip_iso_upload: true
 
-    - name: Re-run unchanged Rocky media build
-      ansible.builtin.include_role:
-        name: proxmox_automatic
-        tasks_from: create_kickstart.yml
+  - name: Re-run unchanged Rocky media build
+    ansible.builtin.include_role:
+      name: proxmox_automatic
+      tasks_from: create_kickstart.yml
 
-    - name: Assert Rocky media cache is reused
-      ansible.builtin.assert:
-        that:
-          - not _proxmox_media_rebuild
+  - name: Assert Rocky media cache is reused
+    ansible.builtin.assert:
+      that:
+      - not _proxmox_media_rebuild
 
-    - name: Assert Rocky media artifacts exist
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      loop:
-        - "{{ proxmox_automatic_files_dir }}/ks-{{ ansible_host }}.cfg"
-        - "{{ proxmox_automatic_iso_dir }}/ks-{{ ansible_host }}.iso"
-      register: proxmox_automatic_rocky_artifacts
+  - name: Assert Rocky media artifacts exist
+    ansible.builtin.stat:
+      path: "{{ item }}"
+    loop:
+    - "{{ proxmox_automatic_files_dir }}/ks-{{ ansible_host }}.cfg"
+    - "{{ proxmox_automatic_iso_dir }}/ks-{{ ansible_host }}.iso"
+    register: proxmox_automatic_rocky_artifacts
 
-    - name: Validate Rocky media artifacts
-      ansible.builtin.assert:
-        that:
-          - proxmox_automatic_rocky_artifacts.results | map(attribute='stat.exists') | min
+  - name: Validate Rocky media artifacts
+    ansible.builtin.assert:
+      that:
+      - proxmox_automatic_rocky_artifacts.results | map(attribute='stat.exists') | min
 
-    - name: Corrupt only the isolated Rocky artifact to exercise cache integrity checks
-      ansible.builtin.copy:
-        content: deliberately-corrupted-fixture
-        dest: "{{ proxmox_automatic_iso_dir }}/ks-{{ ansible_host }}.iso"
-        mode: "0600"
+  - name: Corrupt only the isolated Rocky artifact to exercise cache integrity checks
+    ansible.builtin.copy:
+      content: deliberately-corrupted-fixture
+      dest: "{{ proxmox_automatic_iso_dir }}/ks-{{ ansible_host }}.iso"
+      mode: "0600"
 
-    - name: Rebuild a corrupted local artifact
-      ansible.builtin.include_role:
-        name: proxmox_automatic
-        tasks_from: create_kickstart.yml
+  - name: Rebuild a corrupted local artifact
+    ansible.builtin.include_role:
+      name: proxmox_automatic
+      tasks_from: create_kickstart.yml
 
-    - name: Assert corruption triggered a rebuild
-      ansible.builtin.assert:
-        that:
-          - _proxmox_media_rebuild
+  - name: Assert corruption triggered a rebuild
+    ansible.builtin.assert:
+      that:
+      - _proxmox_media_rebuild
 
-    - name: Create Debian fixture source tree
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: directory
-        mode: "0755"
-      loop:
-        - "{{ proxmox_automatic_test_workspace.path }}/fixture-src/isolinux"
-        - "{{ proxmox_automatic_test_workspace.path }}/fixture-src/install.amd"
-        - "{{ proxmox_automatic_test_workspace.path }}/fixture-src/boot/grub"
+  - name: Create Debian fixture source tree
+    ansible.builtin.file:
+      path: "{{ item }}"
+      state: directory
+      mode: "0755"
+    loop:
+    - "{{ proxmox_automatic_test_workspace.path }}/fixture-src/isolinux"
+    - "{{ proxmox_automatic_test_workspace.path }}/fixture-src/install.amd"
+    - "{{ proxmox_automatic_test_workspace.path }}/fixture-src/boot/grub"
 
     # Structural fixture only: BIOS stub, kernel and initrd are deliberately not bootable.
-    - name: Create isolated fixture BIOS boot image
-      ansible.builtin.command:
-        argv:
-          - dd
-          - if=/dev/zero
-          - "of={{ proxmox_automatic_test_workspace.path }}/fixture-src/isolinux/isolinux.bin"
-          - bs=2048
-          - count=1
-      changed_when: true
+  - name: Create isolated fixture BIOS boot image
+    ansible.builtin.command:
+      argv:
+      - dd
+      - if=/dev/zero
+      - "of={{ proxmox_automatic_test_workspace.path }}/fixture-src/isolinux/isolinux.bin"
+      - bs=2048
+      - count=1
+    changed_when: true
 
-    - name: Create Debian fixture boot files
-      ansible.builtin.copy:
-        dest: "{{ item.path }}"
-        content: "{{ item.content }}"
-        mode: "0644"
-      loop:
-        - path: "{{ proxmox_automatic_test_workspace.path }}/fixture-src/isolinux/isolinux.cfg"
-          content: |
-            default install
-            timeout 1
-            include txt.cfg
-        - path: "{{ proxmox_automatic_test_workspace.path }}/fixture-src/isolinux/txt.cfg"
-          content: |
-            label install
-              menu label ^Install
-              kernel /install.amd/vmlinuz
-              append vga=788 initrd=/install.amd/initrd.gz ---
-        - path: "{{ proxmox_automatic_test_workspace.path }}/fixture-src/boot/grub/grub.cfg"
-          content: |
-            menuentry 'Install' {
-              linux /install.amd/vmlinuz ---
-              initrd /install.amd/initrd.gz
-            }
-        - path: "{{ proxmox_automatic_test_workspace.path }}/fixture-src/install.amd/vmlinuz"
-          content: "linux"
-        - path: "{{ proxmox_automatic_test_workspace.path }}/fixture-src/install.amd/initrd.gz"
-          content: "initrd"
+  - name: Create Debian fixture boot files
+    ansible.builtin.copy:
+      dest: "{{ item.path }}"
+      content: "{{ item.content }}"
+      mode: "0644"
+    loop:
+    - path: "{{ proxmox_automatic_test_workspace.path }}/fixture-src/isolinux/isolinux.cfg"
+      content: |
+        default install
+        timeout 1
+        include txt.cfg
+    - path: "{{ proxmox_automatic_test_workspace.path }}/fixture-src/isolinux/txt.cfg"
+      content: |
+        label install
+          menu label ^Install
+          kernel /install.amd/vmlinuz
+          append vga=788 initrd=/install.amd/initrd.gz ---
+    - path: "{{ proxmox_automatic_test_workspace.path }}/fixture-src/boot/grub/grub.cfg"
+      content: |
+        menuentry 'Install' {
+          linux /install.amd/vmlinuz ---
+          initrd /install.amd/initrd.gz
+        }
+    - path: "{{ proxmox_automatic_test_workspace.path }}/fixture-src/install.amd/vmlinuz"
+      content: "linux"
+    - path: "{{ proxmox_automatic_test_workspace.path }}/fixture-src/install.amd/initrd.gz"
+      content: "initrd"
 
-    - name: Create Debian fixture EFI image
-      ansible.builtin.command:
-        cmd: "dd if=/dev/zero of={{ proxmox_automatic_test_workspace.path | quote }}/fixture-src/boot/grub/efi.img bs=1024 count=1440"
-      changed_when: true
+  - name: Create Debian fixture EFI image
+    ansible.builtin.command:
+      cmd: "dd if=/dev/zero of={{ proxmox_automatic_test_workspace.path | quote }}/fixture-src/boot/grub/efi.img bs=1024 count=1440"
+    changed_when: true
 
-    - name: Build Debian fixture source ISO
-      ansible.builtin.shell: |
-        set -euo pipefail
-        xorriso -as mkisofs \
-          -r -J -joliet-long -l \
-          -V TEST_DEBIAN_FIXTURE \
-          -o "{{ proxmox_automatic_test_workspace.path }}/fixture-src/debian-source.iso" \
-          -c isolinux/boot.cat \
-          -b isolinux/isolinux.bin \
-          -no-emul-boot \
-          -boot-load-size 4 \
-          -boot-info-table \
-          -eltorito-alt-boot \
-          -e boot/grub/efi.img \
-          -no-emul-boot \
-          "{{ proxmox_automatic_test_workspace.path }}/fixture-src"
-      args:
-        executable: /bin/bash
-      changed_when: true
+  - name: Build Debian fixture source ISO
+    ansible.builtin.shell: |
+      set -euo pipefail
+      xorriso -as mkisofs \
+        -r -J -joliet-long -l \
+        -V TEST_DEBIAN_FIXTURE \
+        -o "{{ proxmox_automatic_test_workspace.path }}/fixture-src/debian-source.iso" \
+        -c isolinux/boot.cat \
+        -b isolinux/isolinux.bin \
+        -no-emul-boot \
+        -boot-load-size 4 \
+        -boot-info-table \
+        -eltorito-alt-boot \
+        -e boot/grub/efi.img \
+        -no-emul-boot \
+        "{{ proxmox_automatic_test_workspace.path }}/fixture-src"
+    args:
+      executable: /bin/bash
+    changed_when: true
 
-    - name: Read Debian fixture source ISO label
-      ansible.builtin.command:
-        cmd: "xorriso -indev {{ proxmox_automatic_test_workspace.path | quote }}/fixture-src/debian-source.iso -pvd_info"
-      register: proxmox_automatic_debian_fixture_pvd_info
-      changed_when: false
+  - name: Read Debian fixture source ISO label
+    ansible.builtin.command:
+      cmd: "xorriso -indev {{ proxmox_automatic_test_workspace.path | quote }}/fixture-src/debian-source.iso -pvd_info"
+    register: proxmox_automatic_debian_fixture_pvd_info
+    changed_when: false
 
-    - name: Set effective Debian package list
-      ansible.builtin.set_fact:
-        proxmox_automatic_packages_effective: "{{ proxmox_automatic_debian_packages_default }}"
-        proxmox_automatic_source_iso_path: "{{ proxmox_automatic_test_workspace.path }}/fixture-src/debian-source.iso"
-        proxmox_automatic_source_iso_name: "debian-13.0.0-amd64-netinst"
-        proxmox_automatic_generated_iso_name: "debian13-test-{{ ansible_host }}"
+  - name: Set effective Debian package list
+    ansible.builtin.set_fact:
+      proxmox_automatic_packages_effective: "{{ proxmox_automatic_debian_packages_default }}"
+      proxmox_automatic_source_iso_path: "{{ proxmox_automatic_test_workspace.path }}/fixture-src/debian-source.iso"
+      proxmox_automatic_source_iso_name: "debian-13.0.0-amd64-netinst"
+      proxmox_automatic_generated_iso_name: "debian13-test-{{ ansible_host }}"
 
-    - name: Select Debian backend for compatibility adapter
-      ansible.builtin.set_fact:
-        proxmox_automatic_installer_backend: debian13_preseed
+  - name: Select Debian backend for compatibility adapter
+    ansible.builtin.set_fact:
+      proxmox_automatic_installer_backend: debian13_preseed
 
-    - name: Run Debian media generation role tasks
-      ansible.builtin.include_role:
-        name: proxmox_automatic
-        tasks_from: create_preseed.yml
-      vars:
-        proxmox_automatic_skip_iso_upload: true
+  - name: Run Debian media generation role tasks
+    ansible.builtin.include_role:
+      name: proxmox_automatic
+      tasks_from: create_preseed.yml
+    vars:
+      proxmox_automatic_skip_iso_upload: true
 
-    - name: Re-run unchanged Debian media build
-      ansible.builtin.include_role:
-        name: proxmox_automatic
-        tasks_from: create_preseed.yml
+  - name: Re-run unchanged Debian media build
+    ansible.builtin.include_role:
+      name: proxmox_automatic
+      tasks_from: create_preseed.yml
 
-    - name: Assert Debian media cache is reused
-      ansible.builtin.assert:
-        that:
-          - not _proxmox_media_rebuild
+  - name: Assert Debian media cache is reused
+    ansible.builtin.assert:
+      that:
+      - not _proxmox_media_rebuild
 
-    - name: Assert Debian media artifacts exist
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      loop:
-        - "{{ proxmox_automatic_files_dir }}/preseed-{{ ansible_host }}.cfg"
-        - "{{ proxmox_automatic_iso_dir }}/debian13-test-{{ ansible_host }}.iso"
-      register: proxmox_automatic_debian_artifacts
+  - name: Assert Debian media artifacts exist
+    ansible.builtin.stat:
+      path: "{{ item }}"
+    loop:
+    - "{{ proxmox_automatic_files_dir }}/preseed-{{ ansible_host }}.cfg"
+    - "{{ proxmox_automatic_iso_dir }}/debian13-test-{{ ansible_host }}.iso"
+    register: proxmox_automatic_debian_artifacts
 
-    - name: Validate Debian media artifacts
-      ansible.builtin.assert:
-        that:
-          - proxmox_automatic_debian_artifacts.results | map(attribute='stat.exists') | min
+  - name: Validate Debian media artifacts
+    ansible.builtin.assert:
+      that:
+      - proxmox_automatic_debian_artifacts.results | map(attribute='stat.exists') | min
 
-    - name: Read remastered Debian ISO label
-      ansible.builtin.command:
-        cmd: "xorriso -indev {{ proxmox_automatic_iso_dir | quote }}/debian13-test-{{ ansible_host }}.iso -pvd_info"
-      register: proxmox_automatic_debian_remaster_pvd_info
-      changed_when: false
+  - name: Read remastered Debian ISO label
+    ansible.builtin.command:
+      cmd: "xorriso -indev {{ proxmox_automatic_iso_dir | quote }}/debian13-test-{{ ansible_host }}.iso -pvd_info"
+    register: proxmox_automatic_debian_remaster_pvd_info
+    changed_when: false
 
-    - name: Extract source and remastered Debian ISO labels
-      ansible.builtin.set_fact:
-        proxmox_automatic_debian_fixture_volume_id: >-
-          {{
-            (
-              proxmox_automatic_debian_fixture_pvd_info.stdout.splitlines()
-              | select('search', '^Volume Id    : ')
-              | first
-              | regex_replace('^Volume Id    : ', '')
-            )
-          }}
-        proxmox_automatic_debian_remaster_volume_id: >-
-          {{
-            (
-              proxmox_automatic_debian_remaster_pvd_info.stdout.splitlines()
-              | select('search', '^Volume Id    : ')
-              | first
-              | regex_replace('^Volume Id    : ', '')
-            )
-          }}
+  - name: Extract source and remastered Debian ISO labels
+    ansible.builtin.set_fact:
+      proxmox_automatic_debian_fixture_volume_id: >-
+        {{
+          (
+            proxmox_automatic_debian_fixture_pvd_info.stdout.splitlines()
+            | select('search', '^Volume Id    : ')
+            | first
+            | regex_replace('^Volume Id    : ', '')
+          )
+        }}
+      proxmox_automatic_debian_remaster_volume_id: >-
+        {{
+          (
+            proxmox_automatic_debian_remaster_pvd_info.stdout.splitlines()
+            | select('search', '^Volume Id    : ')
+            | first
+            | regex_replace('^Volume Id    : ', '')
+          )
+        }}
 
-    - name: Assert remastered Debian ISO preserves source label
-      ansible.builtin.assert:
-        that:
-          - proxmox_automatic_debian_remaster_volume_id == proxmox_automatic_debian_fixture_volume_id
+  - name: Assert remastered Debian ISO preserves source label
+    ansible.builtin.assert:
+      that:
+      - proxmox_automatic_debian_remaster_volume_id == proxmox_automatic_debian_fixture_volume_id
 
-    - name: Extract remastered Debian ISO for boot validation
-      ansible.builtin.command:
-        cmd: >-
-          xorriso -osirrox on
-          -indev {{ proxmox_automatic_iso_dir | quote }}/debian13-test-{{ ansible_host }}.iso
-          -extract / {{ proxmox_automatic_test_workspace.path | quote }}/debian-remastered-root
-      changed_when: false
+  - name: Extract remastered Debian ISO for boot validation
+    ansible.builtin.command:
+      cmd: >-
+        xorriso -osirrox on
+        -indev {{ proxmox_automatic_iso_dir | quote }}/debian13-test-{{ ansible_host }}.iso
+        -extract / {{ proxmox_automatic_test_workspace.path | quote }}/debian-remastered-root
+    changed_when: false
 
-    - name: Read remastered Debian El Torito boot entries
-      ansible.builtin.command:
-        argv:
-          - xorriso
-          - -indev
-          - "{{ proxmox_automatic_iso_dir }}/debian13-test-{{ ansible_host }}.iso"
-          - -report_el_torito
-          - plain
-      register: proxmox_automatic_debian_boot_report
-      changed_when: false
+  - name: Read remastered Debian El Torito boot entries
+    ansible.builtin.command:
+      argv:
+      - xorriso
+      - -indev
+      - "{{ proxmox_automatic_iso_dir }}/debian13-test-{{ ansible_host }}.iso"
+      - -report_el_torito
+      - plain
+    register: proxmox_automatic_debian_boot_report
+    changed_when: false
 
-    - name: Assert remastered Debian ISO retains BIOS and UEFI boot images
-      ansible.builtin.assert:
-        that:
-          - proxmox_automatic_debian_boot_report.stdout is search('El Torito boot img :\\s+1\\s+BIOS')
-          - proxmox_automatic_debian_boot_report.stdout is search('El Torito boot img :\\s+2\\s+UEFI')
-          - proxmox_automatic_debian_boot_report.stdout is search('/isolinux/isolinux.bin')
-          - proxmox_automatic_debian_boot_report.stdout is search('/boot/grub/efi.img')
+  - name: Assert remastered Debian ISO retains BIOS and UEFI boot images
+    ansible.builtin.assert:
+      that:
+      - proxmox_automatic_debian_boot_report.stdout is search('El Torito boot img :\\s+1\\s+BIOS')
+      - proxmox_automatic_debian_boot_report.stdout is search('El Torito boot img :\\s+2\\s+UEFI')
+      - proxmox_automatic_debian_boot_report.stdout is search('/isolinux/isolinux.bin')
+      - proxmox_automatic_debian_boot_report.stdout is search('/boot/grub/efi.img')
 
-    - name: Assert remastered Debian ISO extracted preseed exists
-      ansible.builtin.stat:
-        path: "{{ proxmox_automatic_test_workspace.path }}/debian-remastered-root/preseed.cfg"
-      register: proxmox_automatic_extracted_preseed_stat
+  - name: Assert remastered Debian ISO extracted preseed exists
+    ansible.builtin.stat:
+      path: "{{ proxmox_automatic_test_workspace.path }}/debian-remastered-root/preseed.cfg"
+    register: proxmox_automatic_extracted_preseed_stat
 
-    - name: Validate extracted Debian preseed presence
-      ansible.builtin.assert:
-        that:
-          - proxmox_automatic_extracted_preseed_stat.stat.exists
-          - proxmox_automatic_extracted_preseed_stat.stat.isreg
+  - name: Validate extracted Debian preseed presence
+    ansible.builtin.assert:
+      that:
+      - proxmox_automatic_extracted_preseed_stat.stat.exists
+      - proxmox_automatic_extracted_preseed_stat.stat.isreg
 
-    - name: Read remastered Debian boot configuration files
-      ansible.builtin.slurp:
-        src: "{{ item }}"
-      loop:
-        - "{{ proxmox_automatic_test_workspace.path }}/debian-remastered-root/boot/grub/grub.cfg"
-        - "{{ proxmox_automatic_test_workspace.path }}/debian-remastered-root/isolinux/isolinux.cfg"
-        - "{{ proxmox_automatic_test_workspace.path }}/debian-remastered-root/isolinux/txt.cfg"
-      register: proxmox_automatic_debian_boot_configs
+  - name: Read remastered Debian boot configuration files
+    ansible.builtin.slurp:
+      src: "{{ item }}"
+    loop:
+    - "{{ proxmox_automatic_test_workspace.path }}/debian-remastered-root/boot/grub/grub.cfg"
+    - "{{ proxmox_automatic_test_workspace.path }}/debian-remastered-root/isolinux/isolinux.cfg"
+    - "{{ proxmox_automatic_test_workspace.path }}/debian-remastered-root/isolinux/txt.cfg"
+    register: proxmox_automatic_debian_boot_configs
 
-    - name: Validate remastered Debian boot configuration
-      ansible.builtin.assert:
-        that:
-          - proxmox_automatic_debian_grub_cfg is search('preseed/file=/cdrom/preseed.cfg')
-          - proxmox_automatic_debian_grub_cfg is search('set timeout=1')
-          - proxmox_automatic_debian_grub_cfg is search('set default=1')
-          - proxmox_automatic_debian_grub_cfg is not search('\\$1 auto=true')
-          - proxmox_automatic_debian_isolinux_cfg is search('ontimeout auto')
-          - proxmox_automatic_debian_isolinux_cfg is search('timeout 10')
-          - proxmox_automatic_debian_txt_cfg is search('label auto')
-          - proxmox_automatic_debian_txt_cfg is search('preseed/file=/cdrom/preseed.cfg')
-      vars:
-        proxmox_automatic_debian_grub_cfg: >-
-          {{
-            (proxmox_automatic_debian_boot_configs.results[0].content | b64decode)
-          }}
-        proxmox_automatic_debian_isolinux_cfg: >-
-          {{
-            (proxmox_automatic_debian_boot_configs.results[1].content | b64decode)
-          }}
-        proxmox_automatic_debian_txt_cfg: >-
-          {{
-            (proxmox_automatic_debian_boot_configs.results[2].content | b64decode)
-          }}
+  - name: Validate remastered Debian boot configuration
+    ansible.builtin.assert:
+      that:
+      - proxmox_automatic_debian_grub_cfg is search('preseed/file=/cdrom/preseed.cfg')
+      - proxmox_automatic_debian_grub_cfg is search('set timeout=1')
+      - proxmox_automatic_debian_grub_cfg is search('set default=1')
+      - proxmox_automatic_debian_grub_cfg is not search('\\$1 auto=true')
+      - proxmox_automatic_debian_isolinux_cfg is search('ontimeout auto')
+      - proxmox_automatic_debian_isolinux_cfg is search('timeout 10')
+      - proxmox_automatic_debian_txt_cfg is search('label auto')
+      - proxmox_automatic_debian_txt_cfg is search('preseed/file=/cdrom/preseed.cfg')
+    vars:
+      proxmox_automatic_debian_grub_cfg: >-
+        {{
+          (proxmox_automatic_debian_boot_configs.results[0].content | b64decode)
+        }}
+      proxmox_automatic_debian_isolinux_cfg: >-
+        {{
+          (proxmox_automatic_debian_boot_configs.results[1].content | b64decode)
+        }}
+      proxmox_automatic_debian_txt_cfg: >-
+        {{
+          (proxmox_automatic_debian_boot_configs.results[2].content | b64decode)
+        }}
 
-    - name: Make extracted read-only ISO fixture removable
-      ansible.builtin.command:
-        argv:
-          - chmod
-          - -R
-          - u+w
-          - "{{ proxmox_automatic_test_workspace.path }}"
-      changed_when: true
+  - name: Make extracted read-only ISO fixture removable
+    ansible.builtin.command:
+      argv:
+      - chmod
+      - -R
+      - u+w
+      - "{{ proxmox_automatic_test_workspace.path }}"
+    changed_when: true
 
-    - name: Remove test workspace
-      ansible.builtin.file:
-        path: "{{ proxmox_automatic_test_workspace.path }}"
-        state: absent
+  - name: Remove test workspace
+    ansible.builtin.file:
+      path: "{{ proxmox_automatic_test_workspace.path }}"
+      state: absent

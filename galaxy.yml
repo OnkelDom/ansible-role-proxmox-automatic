@@ -4,28 +4,62 @@ name: proxmox
 version: 0.2.0
 readme: README.md
 authors:
-  - Lenmail Maintainers
+- Lenmail Maintainers
 description: Proxmox unattended provisioning and centrally managed firewall policies
 license:
-  - MIT
+- MIT
 tags:
-  - proxmox
-  - infrastructure
-  - linux
+- proxmox
+- infrastructure
+- linux
 repository: https://github.com/OnkelDom/ansible-role-proxmox-automatic
 dependencies:
   community.proxmox: '>=1.4.0,<3.0.0'
   community.general: '>=12.0.0,<14.0.0'
   ansible.posix: '>=2.1.0,<3.0.0'
 build_ignore:
-  - .git
-  - .collections
-  - .ci-roles
-  - examples/roles
-  - .cache
-  - .ansible
-  - .proxmox-firewall-backups
-  - .venv
-  - .e2e-live
-  - '*.tar.gz'
-  - __pycache__
+- .git
+- .github
+- .collections
+- .ci-roles
+- examples/roles
+- .cache
+- .ansible
+- .proxmox-firewall-backups
+- .venv*
+- .env*
+- .e2e-live
+- .pytest_cache
+- __pycache__
+- '**/__pycache__'
+- '*.tar.gz'
+- '*.iso'
+- '*.log'
+- '*.pyc'
+- '*.pem'
+- '*.key'
+- .DS_Store
+- AGENTS.md
+- .editorconfig
+- .gitignore
+- .ansible-lint
+- .ansible-lint.yml
+- .yamllint
+- .yamllint.yml
+- ansible.cfg
+- requirements.yml
+- requirements-test.txt
+- requirements-dev.yml
+- Makefile
+- CONTRIBUTING.md
+- SECURITY.md
+- CHANGELOG.md
+- tools
+- scripts
+- tests
+- docs
+- roles/*/tests
+- roles/*/molecule
+documentation: https://github.com/OnkelDom/ansible-role-proxmox-automatic#readme
+homepage: https://github.com/OnkelDom/ansible-role-proxmox-automatic
+issues: https://github.com/OnkelDom/ansible-role-proxmox-automatic/issues

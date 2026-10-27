@@ -30,13 +30,13 @@ proxmox_automatic_debian_mirror_directory: "/debian"
 proxmox_automatic_debian_security_host: "security.debian.org"
 proxmox_automatic_debian_tasksel: []
 proxmox_automatic_debian_packages_default:
-  - ca-certificates
-  - lvm2
-  - openssh-server
-  - qemu-guest-agent
-  - sudo
-  - vim
-  - xfsprogs
+- ca-certificates
+- lvm2
+- openssh-server
+- qemu-guest-agent
+- sudo
+- vim
+- xfsprogs
 proxmox_automatic_debian_interface_prefix: "ens"
 proxmox_automatic_debian_interface_index_start: 18
 proxmox_automatic_debian_partition_recipe_override: ""
@@ -52,13 +52,13 @@ proxmox_automatic_api_validate_certs: true
 # Kickstart Configuration
 proxmox_automatic_timezone: "Europe/Berlin"
 proxmox_automatic_ntp_servers:
-  - "0.de.pool.ntp.org"
-  - "1.de.pool.ntp.org"
-  - "2.de.pool.ntp.org"
-  - "3.de.pool.ntp.org"
+- "0.de.pool.ntp.org"
+- "1.de.pool.ntp.org"
+- "2.de.pool.ntp.org"
+- "3.de.pool.ntp.org"
 proxmox_automatic_dns_servers:
-  - "1.0.0.1"
-  - "1.1.1.1"
+- "1.0.0.1"
+- "1.1.1.1"
 
 # IPv6 Configuration (optional)
 proxmox_automatic_ipv6_enabled: false
@@ -134,14 +134,14 @@ proxmox_automatic_language: "en_US.UTF-8"
 proxmox_automatic_selinux_mode: "enforcing"  # enforcing, permissive, disabled
 proxmox_automatic_firewall_enabled: true
 proxmox_automatic_firewall_services:
-  - "ssh"
+- "ssh"
 
 # System Services Configuration
 proxmox_automatic_enabled_services:
-  - "sshd"
-  - "rsyslog"
-  - "chronyd"
-  - "NetworkManager"
+- "sshd"
+- "rsyslog"
+- "chronyd"
+- "NetworkManager"
 proxmox_automatic_disabled_services: []
 
 # Boot and Installation Configuration
@@ -160,64 +160,64 @@ proxmox_automatic_users: []
 proxmox_automatic_url_baseos: ""
 proxmox_automatic_url_mirrorlist: "http://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=BaseOS-9"
 proxmox_automatic_repos:
-  - name: baseos
-    mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=BaseOS-9
-  - name: appstream
-    mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=AppStream-9
-  - name: extras
-    mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=extras-9
-  - name: crb
-    mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=CRB-9
+- name: baseos
+  mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=BaseOS-9
+- name: appstream
+  mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=AppStream-9
+- name: extras
+  mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=extras-9
+- name: crb
+  mirrorlist: https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=CRB-9
 
 
 # Storage configuration
 proxmox_automatic_storage_config_defaults:
-  - name: virtio0
-    size: "{{ proxmox_automatic_first_disk_size }}"
-    disk: vda
-    bootloader: true
-    partitions:
-      - name: efi
-        mount: /boot/efi
-        size: 1024
-        fstype: efi
-        primary: true
-      - name: boot
-        mount: /boot
-        size: 1024
-        fstype: ext4
-        primary: true
-      - name: pv.root
-        size: 1024
-        grow: true
-        primary: true
-        type: pv
-    vg:
-      - name: system
-        lv:
-          - name: root
-            mount: /
-            size: 1024
-            grow: true
-            fstype: xfs
-          - name: log
-            mount: /var/log
-            size: 4096
-            fstype: xfs
-          - name: swap
-            mount: swap
-            size: 2048
-            fstype: swap
+- name: virtio0
+  size: "{{ proxmox_automatic_first_disk_size }}"
+  disk: vda
+  bootloader: true
+  partitions:
+  - name: efi
+    mount: /boot/efi
+    size: 1024
+    fstype: efi
+    primary: true
+  - name: boot
+    mount: /boot
+    size: 1024
+    fstype: ext4
+    primary: true
+  - name: pv.root
+    size: 1024
+    grow: true
+    primary: true
+    type: pv
+  vg:
+  - name: system
+    lv:
+    - name: root
+      mount: /
+      size: 1024
+      grow: true
+      fstype: xfs
+    - name: log
+      mount: /var/log
+      size: 4096
+      fstype: xfs
+    - name: swap
+      mount: swap
+      size: 2048
+      fstype: swap
 
 # Package Management
 # Default packages installed on all VMs (base system)
 proxmox_automatic_packages_default_rocky_kickstart:
-  - ca-certificates
-  - lvm2
-  - openssh-server
-  - qemu-guest-agent
-  - vim-enhanced
-  - xfsprogs
+- ca-certificates
+- lvm2
+- openssh-server
+- qemu-guest-agent
+- vim-enhanced
+- xfsprogs
 
 proxmox_automatic_packages_default: []
 

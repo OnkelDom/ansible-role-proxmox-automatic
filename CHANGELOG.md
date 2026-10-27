@@ -1,13 +1,20 @@
 # Changelog
 
-## Unreleased
+## [0.2.0] - 2026-10-27
+
+- Gemeinsamer Vertrag `degitag-collections-v1` mit Infrastructure, Database, Monitoring und K3s abgestimmt.
+- Einheitliche README-Gliederung, CONTRIBUTING, SECURITY, EditorConfig und datierte Prüfnachweise.
+- Gemeinsame Repository-/Artefaktprüfer und ein verbindlicher Prüfeinstieg `tests/run_checks.sh`; Make-Ziele bleiben Wrapper.
+- Python 3.12 / ansible-core >=2.20.10,<2.22 ersetzen den bisherigen Controller-Support für Python 3.11/Core 2.19.
+- CI-Matrix Core 2.20/2.21, SHA-gepinnte Actions, minimale Berechtigungen und geprüfter Tag-Release-Workflow.
+- Anforderungen nach `requirements.yml`/`requirements-test.txt`, Werkzeuge nach `tools/` verschoben.
+- Runtime-Paket ohne Caches, Tests und Entwicklungsdateien; Legacy-Symlinks werden beim Build zu regulären Dateien.
+- Alle Rollen erhalten beschriebene Schnittstellen und Syntaxprüfungen; interne Phasen bleiben klar gekennzeichnet.
 
 - PR #2: lokaler Beispielrollen-Link und Lint-/Ignore-Regeln in die Collection-Struktur integriert.
 
 - Debian-Remaster ersetzt nur Installer-Konfigurationen und erhält Bootdateien für xorriso 1.5.6.
 - Medien-Tests prüfen den Erhalt beider El-Torito-Booteinträge für BIOS und UEFI.
-
-## 0.2.0 — 2026-10-27
 
 - Collection `degitag.proxmox` mit Deploy-, Cluster-, Medien-, VM- und begrenzter Gastrolle.
 - Namespace auf `degitag` umgestellt; bestehende Firewall- und Installationsmarker bleiben kompatibel.
@@ -24,12 +31,10 @@
 - Lokale Tests und Collection-Build; echte Proxmox-/Firewall-E2E-Abnahme weiterhin separat erforderlich.
 
 
-All notable changes to this project will be documented in this file.
+Die folgenden Einträge dokumentieren die historische Standalone-Rolle; deren Versionslinie und bisherige Tags bleiben unverändert.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
 
 ## [1.0.7] - 2025-08-04
 

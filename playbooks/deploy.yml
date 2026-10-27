@@ -4,4 +4,4 @@
   gather_facts: false
   strategy: linear
   roles:
-    - degitag.proxmox.deploy
+  - degitag.proxmox.deploy

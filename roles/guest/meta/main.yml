@@ -1,0 +1,7 @@
+---
+galaxy_info:
+  author: Lenmail Maintainers
+  description: "Gast pr\xFCfen und konfigurieren"
+  license: MIT
+  min_ansible_version: '2.20'
+dependencies: []

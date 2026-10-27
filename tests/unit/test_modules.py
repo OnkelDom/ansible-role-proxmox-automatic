@@ -52,6 +52,11 @@ class VMAPI:
 
 
 class ModuleTests(unittest.TestCase):
+    def test_missing_requests_reports_execution_dependency(self):
+        with patch.object(api_module, 'requests', None):
+            with self.assertRaisesRegex(RuntimeError, 'requests Python library is required'):
+                api_module.ProxmoxAPI({})
+
     def run_lifecycle(self, module, api):
         with patch.object(lifecycle, 'AnsibleModule', return_value=module), patch.object(lifecycle, 'ProxmoxAPI', return_value=api):
             with self.assertRaises(Exit) as result:

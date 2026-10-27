@@ -14,17 +14,17 @@
       node: pve01
       vmid: 3011
       networks:
-        - name: net0
-          bridge: vmbr0
-          ip: 192.0.2.11
-          netmask: 255.255.255.0
+      - name: net0
+        bridge: vmbr0
+        ip: 192.0.2.11
+        netmask: 255.255.255.0
     proxmox_guest:
       ssh_user: automation
       users:
-        - name: automation
-          ssh_key: ssh-ed25519 TEST
+      - name: automation
+        ssh_key: ssh-ed25519 TEST
   roles:
-    - degitag.proxmox.deploy
+  - degitag.proxmox.deploy
 
 - name: Exercise legacy role entry point without API access
   hosts: localhost
@@ -39,12 +39,12 @@
     proxmox_automatic_hypervisor: pve01
     proxmox_automatic_vmid: 3012
     proxmox_automatic_networks:
-      - name: net0
-        bridge: vmbr0
-        ip: 192.0.2.12
-        netmask: 255.255.255.0
+    - name: net0
+      bridge: vmbr0
+      ip: 192.0.2.12
+      netmask: 255.255.255.0
     proxmox_automatic_users:
-      - name: automation
-        ssh_key: ssh-ed25519 TEST
+    - name: automation
+      ssh_key: ssh-ed25519 TEST
   roles:
-    - proxmox_automatic
+  - proxmox_automatic

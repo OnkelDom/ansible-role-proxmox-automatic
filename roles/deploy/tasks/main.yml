@@ -2,146 +2,146 @@
 - name: Execute deployment with synchronized failure boundaries
   any_errors_fatal: true
   block:
-    - name: Normalize inventory without overwriting public configuration
-      ansible.builtin.set_fact:
-        _proxmox_config: >-
-          {{ (dict(_proxmox_input_names | zip(query('ansible.builtin.vars', *_proxmox_input_names, default=''))) | degitag.proxmox.normalize_config) | combine({'inventory_name': inventory_hostname}) }}
-      vars:
-        _proxmox_input_names: "{{ query('ansible.builtin.varnames', '^proxmox_') + ['ansible_host', 'inventory_hostname'] }}"
-      no_log: true
-      tags:
-        - always
+  - name: Normalize inventory without overwriting public configuration
+    ansible.builtin.set_fact:
+      _proxmox_config: >-
+        {{ (dict(_proxmox_input_names | zip(query('ansible.builtin.vars', *_proxmox_input_names, default=''))) | degitag.proxmox.normalize_config) | combine({'inventory_name': inventory_hostname}) }}
+    vars:
+      _proxmox_input_names: "{{ query('ansible.builtin.varnames', '^proxmox_') + ['ansible_host', 'inventory_hostname'] }}"
+    no_log: true
+    tags:
+    - always
 
-    - name: Validate batch aggregation contract
-      ansible.builtin.assert:
-        that:
-          - ansible_play_batch | length == ansible_play_hosts_all | length
-        fail_msg: Use the linear strategy without serial batches for cluster aggregation
-      tags:
-        - always
+  - name: Validate batch aggregation contract
+    ansible.builtin.assert:
+      that:
+      - ansible_play_batch | length == ansible_play_hosts_all | length
+      fail_msg: Use the linear strategy without serial batches for cluster aggregation
+    tags:
+    - always
 
-    - name: Validate shared configuration before any mutation
-      ansible.builtin.set_fact:
-        _proxmox_ha_profiles: >-
-          {{ ansible_play_hosts | map('extract', hostvars, '_proxmox_config') | list |
-             degitag.proxmox.cluster_plan(_proxmox_config.api.host) }}
-      tags:
-        - always
+  - name: Validate shared configuration before any mutation
+    ansible.builtin.set_fact:
+      _proxmox_ha_profiles: >-
+        {{ ansible_play_hosts | map('extract', hostvars, '_proxmox_config') | list |
+           degitag.proxmox.cluster_plan(_proxmox_config.api.host) }}
+    tags:
+    - always
 
-    - name: Inspect VM identity and installation state
-      degitag.proxmox.vm_lifecycle:
-        api: "{{ _proxmox_config.api }}"
-        vmid: "{{ _proxmox_config.vm.vmid }}"
-        name: "{{ _proxmox_config.vm.name }}"
-        node: "{{ _proxmox_config.vm.node }}"
-      delegate_to: localhost
-      register: _proxmox_vm_state
+  - name: Inspect VM identity and installation state
+    degitag.proxmox.vm_lifecycle:
+      api: "{{ _proxmox_config.api }}"
+      vmid: "{{ _proxmox_config.vm.vmid }}"
+      name: "{{ _proxmox_config.vm.name }}"
+      node: "{{ _proxmox_config.vm.node }}"
+    delegate_to: localhost
+    register: _proxmox_vm_state
 
-    - name: Determine whether installer execution is needed
-      ansible.builtin.set_fact:
-        _proxmox_needs_install: >-
-          {{ not _proxmox_vm_state.exists or _proxmox_vm_state.installing or _proxmox_config.deploy.reinstall }}
+  - name: Determine whether installer execution is needed
+    ansible.builtin.set_fact:
+      _proxmox_needs_install: >-
+        {{ not _proxmox_vm_state.exists or _proxmox_vm_state.installing or _proxmox_config.deploy.reinstall }}
 
-    - name: Prepare cluster resources and central firewall policy
-      ansible.builtin.include_role:
-        name: degitag.proxmox.cluster_resources
-        tasks_from: deploy
+  - name: Prepare cluster resources and central firewall policy
+    ansible.builtin.include_role:
+      name: degitag.proxmox.cluster_resources
+      tasks_from: deploy
 
-    - name: Build required installation media
-      ansible.builtin.include_role:
-        name: degitag.proxmox.install_media
-      when: _proxmox_needs_install | bool
+  - name: Build required installation media
+    ansible.builtin.include_role:
+      name: degitag.proxmox.install_media
+    when: _proxmox_needs_install | bool
 
-    - name: Create or resume installer VM
-      ansible.builtin.include_role:
-        name: degitag.proxmox.vm
-      when: _proxmox_needs_install | bool
+  - name: Create or resume installer VM
+    ansible.builtin.include_role:
+      name: degitag.proxmox.vm
+    when: _proxmox_needs_install | bool
 
-    - name: Apply explicitly requested safe hardware updates
-      ansible.builtin.include_role:
-        name: degitag.proxmox.vm
-        tasks_from: update
-      when:
-        - not _proxmox_needs_install | bool
-        - _proxmox_config.deploy.update_hardware | bool
+  - name: Apply explicitly requested safe hardware updates
+    ansible.builtin.include_role:
+      name: degitag.proxmox.vm
+      tasks_from: update
+    when:
+    - not _proxmox_needs_install | bool
+    - _proxmox_config.deploy.update_hardware | bool
 
-    - name: Wait for guest installation to expose SSH
-      ansible.builtin.wait_for:
-        host: "{{ _proxmox_config.guest.host }}"
-        port: "{{ _proxmox_config.guest.port }}"
-        timeout: "{{ _proxmox_config.deploy.install_timeout }}"
-        search_regex: SSH
-      delegate_to: localhost
-      when:
-        - _proxmox_config.deploy.wait_for_install | bool
-        - not ansible_check_mode
+  - name: Wait for guest installation to expose SSH
+    ansible.builtin.wait_for:
+      host: "{{ _proxmox_config.guest.host }}"
+      port: "{{ _proxmox_config.guest.port }}"
+      timeout: "{{ _proxmox_config.deploy.install_timeout }}"
+      search_regex: SSH
+    delegate_to: localhost
+    when:
+    - _proxmox_config.deploy.wait_for_install | bool
+    - not ansible_check_mode
 
-    - name: Verify installed guest and apply optional configuration
-      ansible.builtin.include_role:
-        name: degitag.proxmox.guest
-        apply:
-          delegate_to: "{{ _proxmox_config.guest.host }}"
-          become: true
-      vars:
-        _proxmox_config: "{{ hostvars[inventory_hostname]['_proxmox_config'] }}"
-        ansible_connection: ssh
-        ansible_user: "{{ hostvars[inventory_hostname]['_proxmox_config'].guest.ssh_user }}"
-        ansible_port: "{{ hostvars[inventory_hostname]['_proxmox_config'].guest.port }}"
-      when:
-        - _proxmox_config.deploy.wait_for_install | bool
-        - not ansible_check_mode
+  - name: Verify installed guest and apply optional configuration
+    ansible.builtin.include_role:
+      name: degitag.proxmox.guest
+      apply:
+        delegate_to: "{{ _proxmox_config.guest.host }}"
+        become: true
+    vars:
+      _proxmox_config: "{{ hostvars[inventory_hostname]['_proxmox_config'] }}"
+      ansible_connection: ssh
+      ansible_user: "{{ hostvars[inventory_hostname]['_proxmox_config'].guest.ssh_user }}"
+      ansible_port: "{{ hostvars[inventory_hostname]['_proxmox_config'].guest.port }}"
+    when:
+    - _proxmox_config.deploy.wait_for_install | bool
+    - not ansible_check_mode
 
-    - name: Set installed system boot and detach owned installer media after verification
-      degitag.proxmox.vm_lifecycle:
-        api: "{{ _proxmox_config.api }}"
-        vmid: "{{ _proxmox_config.vm.vmid }}"
-        name: "{{ _proxmox_config.vm.name }}"
-        node: "{{ _proxmox_config.vm.node }}"
-        operation: complete
-        media: "{{ _proxmox_media_drives | default({}) }}"
-        boot_disk: "{{ _proxmox_config.vm.boot_disk }}"
-        detach: "{{ _proxmox_config.deploy.detach_media }}"
-      delegate_to: localhost
-      when:
-        - _proxmox_config.deploy.wait_for_install | bool
-        - not ansible_check_mode
+  - name: Set installed system boot and detach owned installer media after verification
+    degitag.proxmox.vm_lifecycle:
+      api: "{{ _proxmox_config.api }}"
+      vmid: "{{ _proxmox_config.vm.vmid }}"
+      name: "{{ _proxmox_config.vm.name }}"
+      node: "{{ _proxmox_config.vm.node }}"
+      operation: complete
+      media: "{{ _proxmox_media_drives | default({}) }}"
+      boot_disk: "{{ _proxmox_config.vm.boot_disk }}"
+      detach: "{{ _proxmox_config.deploy.detach_media }}"
+    delegate_to: localhost
+    when:
+    - _proxmox_config.deploy.wait_for_install | bool
+    - not ansible_check_mode
 
-    - name: Apply explicitly enabled VM firewall policy after installation
-      ansible.builtin.include_role:
-        name: degitag.proxmox.cluster_resources
-        tasks_from: vm_firewall
-      when:
-        - _proxmox_config.firewall.pve_enabled | bool
-        - not ansible_check_mode or _proxmox_vm_state.exists
+  - name: Apply explicitly enabled VM firewall policy after installation
+    ansible.builtin.include_role:
+      name: degitag.proxmox.cluster_resources
+      tasks_from: vm_firewall
+    when:
+    - _proxmox_config.firewall.pve_enabled | bool
+    - not ansible_check_mode or _proxmox_vm_state.exists
 
-    - name: Verify SSH after Proxmox firewall activation
-      ansible.builtin.wait_for:
-        host: "{{ _proxmox_config.guest.host }}"
-        port: "{{ _proxmox_config.guest.port }}"
-        timeout: 60
-        search_regex: SSH
-      delegate_to: localhost
-      when:
-        - _proxmox_config.firewall.pve_enabled | bool
-        - _proxmox_config.deploy.wait_for_install | bool
-        - not ansible_check_mode
+  - name: Verify SSH after Proxmox firewall activation
+    ansible.builtin.wait_for:
+      host: "{{ _proxmox_config.guest.host }}"
+      port: "{{ _proxmox_config.guest.port }}"
+      timeout: 60
+      search_regex: SSH
+    delegate_to: localhost
+    when:
+    - _proxmox_config.firewall.pve_enabled | bool
+    - _proxmox_config.deploy.wait_for_install | bool
+    - not ansible_check_mode
 
-    - name: Activate HA only after successful guest verification
-      ansible.builtin.include_role:
-        name: degitag.proxmox.cluster_resources
-        tasks_from: ha
-      when: not ansible_check_mode
+  - name: Activate HA only after successful guest verification
+    ansible.builtin.include_role:
+      name: degitag.proxmox.cluster_resources
+      tasks_from: ha
+    when: not ansible_check_mode
 
-    - name: Remove sensitive local artifacts when explicitly requested
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - "{{ _proxmox_config.install.files_dir }}/{{ 'ks' if _proxmox_config.install.backend == 'rocky_kickstart' else 'preseed' }}-{{ _proxmox_config.vm.name }}.cfg"
-        - "{{ _proxmox_config.install.iso_dir }}/{{ _proxmox_media_backend_generated_iso_name | default('unused') }}.iso"
-        - "{{ _proxmox_config.install.iso_dir }}/{{ _proxmox_media_backend_generated_iso_name | default('unused') }}.manifest.json"
-      delegate_to: localhost
-      when:
-        - _proxmox_config.deploy.cleanup_local_artifacts | bool
-        - _proxmox_needs_install | bool
-        - _proxmox_config.deploy.wait_for_install | bool
+  - name: Remove sensitive local artifacts when explicitly requested
+    ansible.builtin.file:
+      path: "{{ item }}"
+      state: absent
+    loop:
+    - "{{ _proxmox_config.install.files_dir }}/{{ 'ks' if _proxmox_config.install.backend == 'rocky_kickstart' else 'preseed' }}-{{ _proxmox_config.vm.name }}.cfg"
+    - "{{ _proxmox_config.install.iso_dir }}/{{ _proxmox_media_backend_generated_iso_name | default('unused') }}.iso"
+    - "{{ _proxmox_config.install.iso_dir }}/{{ _proxmox_media_backend_generated_iso_name | default('unused') }}.manifest.json"
+    delegate_to: localhost
+    when:
+    - _proxmox_config.deploy.cleanup_local_artifacts | bool
+    - _proxmox_needs_install | bool
+    - _proxmox_config.deploy.wait_for_install | bool

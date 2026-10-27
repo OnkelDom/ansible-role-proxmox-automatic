@@ -1,31 +1,14 @@
-# degitag.proxmox
+# `degitag.proxmox`
+
+[![CI](https://github.com/OnkelDom/ansible-role-proxmox-automatic/actions/workflows/ci.yml/badge.svg)](https://github.com/OnkelDom/ansible-role-proxmox-automatic/actions/workflows/ci.yml)
 
 Ansible-Collection für unbeaufsichtigte Rocky-Linux- und Debian-Installationen auf Proxmox VE, zentrale Firewall-Regeln und optionale Gastkonfiguration. Der bisherige Rollenname `proxmox_automatic` bleibt als Kompatibilitätseinstieg erhalten.
 
-**Firewall-Verwaltung ist enthalten:** gemeinsame Sicherheitsgruppen, Aliase und IP-Sets im Cluster, deren Zuweisung und eigene Regeln je VM sowie optional nftables im Gast. Die drei Ebenen werden unabhängig konfiguriert.
+**Firewall-Verwaltung ist enthalten:** Sicherheitsgruppen, Aliase und IP-Sets im Cluster, Zuweisungen und Regeln je VM sowie optional nftables im Gast.
 
-## Wegweiser
+[Installation](#installation) · [Firewall](#firewall-konfigurieren) · [VM installieren](#vm-installieren) · [Betrieb](#betrieb-vorhandener-vms) · [Checks](#entwicklung-und-checks) · [Migration](#migration)
 
-- [Funktionsumfang und Architektur](#funktionsumfang-und-architektur)
-- [Voraussetzungen](#voraussetzungen)
-- [Installation](#installation)
-- [Firewall konfigurieren](#firewall-konfigurieren)
-- [VM installieren](#vm-installieren)
-- [Betrieb vorhandener VMs](#betrieb-vorhandener-vms)
-- [Installationsmedien und Geheimnisse](#installationsmedien-und-geheimnisse)
-- [Migration und Abnahme](#migration-und-abnahme)
-- [Entwicklung und Tests](#entwicklung-und-tests)
-- [Weitere Dokumentation](#weitere-dokumentation)
-
-## Funktionsumfang und Architektur
-
-| Rolle | Aufgabe |
-|---|---|
-| `degitag.proxmox.deploy` | Vorprüfung, Installation, Verifikation und Abschluss koordinieren |
-| `degitag.proxmox.cluster_resources` | Zentrale Sicherheitsgruppen, Aliase, IP-Sets und explizite Cluster-Regeln unabhängig von VMs verwalten |
-| `degitag.proxmox.install_media` | Kickstart-Konfigurations-CD beziehungsweise remastertes Debian-ISO erzeugen und hochladen |
-| `degitag.proxmox.vm` | VM-Hardware erstellen, Installer starten und Bootreihenfolge steuern |
-| `degitag.proxmox.guest` | Installation prüfen, Bootstrap-Benutzer/Pakete/Sysctl verwalten und optional eine Gast-Firewall einrichten |
+## Verantwortung und Architektur
 
 `deploy` verwendet interne Task-Einstiege für Pools, HA und VM-Firewall. Die Spezialrollen `install_media`, `vm` und `guest` erhalten dabei den normalisierten privaten Kontext `_proxmox_config`; für eigenständige Aufrufe zuerst `deploy`, `tasks_from: normalize_only`, verwenden. Medien-only-Normalisierung ist über `normalize_media` verfügbar.
 
@@ -33,10 +16,10 @@ Aus Sicht des Plattformbetriebs bleiben Patchmanagement, SMTP, Monitoring und al
 
 Zusätzlich konfiguriert die eigenständige Rolle [`degitag.proxmox.metric_server`](roles/metric_server/README.md) einen nativen PVE-OTLP-Metrikexport. Sie läuft mit Root-Rechten auf genau einem repräsentativen PVE-Node je Cluster und wird vom VM-Deployment nicht automatisch aufgerufen.
 
-## Voraussetzungen
+## Plattformen und Laufzeit
 
-- Controller: Python ab 3.11, ansible-core ab 2.19, `requests`, `xorriso` und für die Debian-Bootmenü-Anpassung `perl`.
-- Collections aus `collections/requirements.yml`; für die Community-Proxmox-Module zusätzlich `proxmoxer` im Python-Interpreter des Controllers.
+- Controller: Python 3.12, ansible-core ab 2.20.10 bis einschließlich 2.21, `requests`, `xorriso` und für die Debian-Bootmenü-Anpassung `perl`.
+- Collections aus `requirements.yml`; für die Community-Proxmox-Module zusätzlich `proxmoxer` im Python-Interpreter des Controllers.
 - Rocky-Backend: vorbereitetes Haupt-ISO auf Proxmox, das `ks.cfg` von der zweiten CD lädt. Die Collection baut die Konfigurations-CD.
 - Debian-Backend: lokales Debian-13-AMD64-ISO. Der Remaster übernimmt BIOS-/EFI-Bootmetadaten des Originals.
 - ISO- und VM-Storage, Bridge, API-Berechtigungen, DNS/Mirror-Erreichbarkeit und ein SSH-Schlüssel für den Bootstrap-Benutzer sowie eine geklärte SSH-Hostkey-Vertrauensstellung für neue Gäste.
@@ -52,10 +35,10 @@ Die Collection wird aus diesem Repository gebaut. Die folgenden Befehle benötig
 ```bash
 git clone https://github.com/OnkelDom/ansible-role-proxmox-automatic.git
 cd ansible-role-proxmox-automatic
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements-dev.txt
-ansible-galaxy collection install -r collections/requirements.yml
+pip install -r requirements-test.txt
+ansible-galaxy collection install -r requirements.yml
 make build
 ansible-galaxy collection install ./degitag-proxmox-0.2.0.tar.gz --force
 ```
@@ -82,9 +65,11 @@ EDITOR=vim ansible-vault edit inventory/group_vars/all/vault.yml
 
 Vault-Läufe benötigen `--ask-vault-pass` oder eine konfigurierte Vault-ID.
 
-## Firewall konfigurieren
+## Verwendung
 
-### Welche Ebene ist zuständig?
+### Firewall konfigurieren
+
+#### Welche Ebene ist zuständig?
 
 | Ebene | Konfiguration | Wirkung und Einstieg |
 |---|---|---|
@@ -94,7 +79,7 @@ Vault-Läufe benötigen `--ask-vault-pass` oder eine konfigurierte Vault-ID.
 
 Beide VM-bezogenen Schalter sind standardmäßig `false`. `management_sources` muss bei Aktivierung gesetzt sein und den tatsächlichen SSH-Zugriff abdecken. Für wirksamen PVE-Filterschutz müssen zusätzlich die Firewall-Aktivierung und das Backend auf Cluster und Nodes passend eingerichtet sein.
 
-### 1. Zentrale Gruppen, Aliase und IP-Sets
+#### 1. Zentrale Gruppen, Aliase und IP-Sets
 
 Für den separaten Firewall-Lauf einen repräsentativen Host je Cluster ergänzen:
 
@@ -170,7 +155,7 @@ Eine Sicherheitsgruppe enthält Regeln und wird anschließend von VMs referenzie
 
 Zentrale Firewall-Objekte benötigen `Sys.Modify` auf `/`; die eingebaute Rolle `PVEAdmin` reicht dafür nicht aus. Für den Dauerbetrieb ist diese Berechtigung gezielt einem separaten Policy-Account beziehungsweise dessen Token zuzuweisen. Wenn Token und Passwort konfiguriert sind, hat die Token-Anmeldung Vorrang. Vor einer Aktivierung müssen SSH und die Proxmox-API (standardmäßig TCP 22 und 8006) für die aktuellen internen und gegebenenfalls öffentlichen Adminadressen ausdrücklich freigegeben und ein Rückweg vorbereitet sein.
 
-### Eigentum, Reihenfolge und Löschung
+#### Eigentum, Reihenfolge und Löschung
 
 - Sicherheitsgruppen, Aliase und IP-Sets werden nur aus der ausdrücklich übergebenen Liste verwaltet. Die Collection reserviert ihren Kommentar als Eigentumsmarker `lenmail.proxmox`.
 - Gleichnamige vorhandene Objekte ohne diesen Marker werden nicht automatisch übernommen.
@@ -181,7 +166,7 @@ Zentrale Firewall-Objekte benötigen `Sys.Modify` auf `/`; die eingebaute Rolle 
 - Proxmox verarbeitet mehrere API-Schreibzugriffe einzeln. Ein Firewall-Lauf ist keine atomare Transaktion. Parallele Bearbeitung derselben Objekte ist zu vermeiden; Digests schützen die unterstützten Einzeloperationen.
 - Vor Schreibzugriffen entsteht lokal ein Journal unter `.proxmox-firewall-backups/`, mit Modus `0600`. Es enthält gelesene Ausgangszustände und geplante API-Operationen. Der Modulrückgabewert `backup_file` benennt die Datei auch bei Fehlern. Ein Rollback muss anhand des Journals und der tatsächlichen API-Lage gezielt erfolgen.
 
-### 2. Regeln und Gruppen einer VM zuweisen
+#### 2. Regeln und Gruppen einer VM zuweisen
 
 ```yaml
 # inventory/group_vars/webservers.yml oder host_vars/web01.example.com.yml
@@ -211,7 +196,7 @@ ansible-playbook -i inventory/hosts.yml playbooks/deploy.yml --limit web01.examp
 
 Dies ist der Deployment-Einstieg einschließlich VM-Identitätsprüfung und Gastverifikation. `playbooks/firewall.yml` verwaltet ausschließlich zentrale Objekte und weist vorhandenen VMs keine Gruppen zu.
 
-### 3. Optionale nftables-Regeln im Gast
+#### 3. Optionale nftables-Regeln im Gast
 
 ```yaml
 # Vollständige gewünschte proxmox_firewall-Konfiguration am Host hinterlegen.
@@ -246,11 +231,11 @@ ansible-playbook -i inventory/hosts.yml playbooks/configure_guests.yml --limit w
 
 Dieser Einstieg prüft und konfiguriert den Gast einschließlich aktivierter Gast-Firewall. Er verwaltet weder VM-Hardware noch die PVE-VM-Firewall.
 
-### Ressourcenidentität beim Namespace-Wechsel
+#### Ressourcenidentität beim Namespace-Wechsel
 
 Der öffentliche Collection-Name ist `degitag.proxmox`. Bestehende Laufzeitkennungen bleiben aus Kompatibilitätsgründen erhalten: Firewall-Eigentumsmarker `lenmail.proxmox`, VM-Installationsmarker `lenmail.proxmox:installing` beziehungsweise `:ready`, nftables-Tabelle `inet lenmail_proxmox` sowie `/etc/lenmail-proxmox.nft` und `lenmail-proxmox-firewall.service`. Sie identifizieren bereits verwaltete Ressourcen; ihre Umbenennung würde eine gesonderte Migration erfordern.
 
-## VM installieren
+### VM installieren
 
 Das folgende Beispiel kommt nach `inventory/host_vars/web01.example.com.yml`. Es verwendet die oben definierten API-Daten und zentralen Firewall-Gruppen. `bootstrap_public_key` muss einen eigenen öffentlichen SSH-Schlüssel enthalten; der Controller benötigt den zugehörigen privaten Schlüssel für SSH und einen funktionierenden Sudo-Zugang.
 
@@ -327,7 +312,7 @@ Für Rocky Linux `proxmox_install.backend: rocky_kickstart` setzen und über `so
 
 Die Variablen sind in [VARIABLES.md](VARIABLES.md) indiziert; weitere Inventory-Beispiele liegen unter [examples/inventory](examples/inventory).
 
-## Betrieb vorhandener VMs
+### Betrieb vorhandener VMs
 
 1. Variablen normalisieren und VMID-/Namenskollisionen, Firewall-Definitionen und gemeinsame HA-Profile vor Änderungen prüfen.
 2. Pools und zentrale Firewall-Objekte vorbereiten.
@@ -350,7 +335,7 @@ Neuinstallationen erzeugen neue SSH-Hostkeys. Die Vertrauensdatei muss nach eine
 
 Der Deployment-Weg benötigt die lineare Ansible-Strategie ohne `serial`-Batches. Unabhängige Cluster- und Gastpflege laufen über eigene Playbooks.
 
-## Installationsmedien und Geheimnisse
+### Installationsmedien und Geheimnisse
 
 Installer-Eingaben und Quell-ISO werden gehasht. Ein Manifest prüft zusätzlich die lokale ISO-Prüfsumme; unveränderte Artefakte werden wiederverwendet. Der Remote-Name enthält VMID und volle ISO-SHA256. Ein vorhandener Remote-Name wird nur bei passender Größe wiederverwendet; es erfolgt kein vollständiger Remote-Download zur Inhaltsprüfung. Diese Namen sind als unveränderliche Artefakte zu behandeln.
 
@@ -362,7 +347,63 @@ Konfigurationsdateien, lokale ISOs und Manifeste erhalten `0600`, Arbeitsverzeic
 
 `--check` liest vorhandene API-Zustände und prognostiziert unterstützte Änderungen. Es baut keine neuen ISOs, lädt nichts hoch und verbindet sich nicht mit neuen Gästen. Ein vollständiger Trockenlauf der Betriebssysteminstallation ist damit nicht möglich.
 
-## Migration und Abnahme
+## Rollen
+
+| Rolle | Aufgabe |
+|---|---|
+| `degitag.proxmox.deploy` | Vorprüfung, Installation, Verifikation und Abschluss koordinieren |
+| `degitag.proxmox.cluster_resources` | Zentrale Sicherheitsgruppen, Aliase, IP-Sets und explizite Cluster-Regeln unabhängig von VMs verwalten |
+| `degitag.proxmox.install_media` | Kickstart-Konfigurations-CD beziehungsweise remastertes Debian-ISO erzeugen und hochladen |
+| `degitag.proxmox.vm` | VM-Hardware erstellen, Installer starten und Bootreihenfolge steuern |
+| `degitag.proxmox.guest` | Installation prüfen, Bootstrap-Benutzer/Pakete/Sysctl verwalten und optional eine Gast-Firewall einrichten |
+
+Interne Rollen `install_media`, `vm` und `guest` erhalten ihren validierten Kontext von `deploy`. Direkte Aufrufe benötigen den in der Architektur beschriebenen Normalisierungsschritt. `cluster_resources` und `metric_server` bieten eigenständige Betriebseinstiege.
+
+## Repository-Struktur
+
+```text
+.github/             CI, geprüfte Tag-Releases und Dependency-Updates
+meta/runtime.yml     unterstützte Ansible-Versionen
+galaxy.yml           Collection-Identität, Abhängigkeiten und Paketgrenzen
+requirements.yml     externe Collections für Entwicklung und Checks
+requirements-test.txt Python-Werkzeuge für lokale und GitHub-Prüfungen
+roles/               Deploy-, Cluster-, Medien-, VM-, Gast- und Metrikrollen
+plugins/             API-Module, Filter und gemeinsame API-Bibliotheken
+playbooks/           Deployment, zentrale Firewall und Gastpflege
+examples/            generische Inventories und Aufrufbeispiele
+tests/               Unit-, Integrations-, Installer- und explizite Live-E2E-Tests
+tools/               lokale Vorbereitung, Repository- und Paketprüfungen
+docs/                gemeinsamer Repository-Standard, Migration und Prüfnachweise
+```
+
+`defaults/`, `tasks/`, `templates/` und `meta/main.yml` im Root bleiben für den historischen Rollenaufruf erhalten. Sie sind Adapter zur Collection; neue Funktionalität liegt unter `roles/` und `plugins/`. Dies ist eine dokumentierte Abweichung vom gemeinsamen [Repository-Standard](docs/repository-standard.md).
+
+## Entwicklung und Checks
+
+```bash
+source .venv/bin/activate
+bash tests/run_checks.sh
+```
+
+`bash tests/run_checks.sh` (auch `make ci`) umfasst Lint, Syntax, Python-Tests, Installer-/Firewall-Rendering und isolierte Medien-Fixtures inklusive Cache-Wiederholung. Die Medien-Fixture prüft Struktur und Bootkonfiguration; ihr Kernel/Initrd/BIOS-Stub ist absichtlich nicht bootfähig. Der GitHub-Workflow ist für Python 3.12 mit ansible-core 2.20 und 2.21 konfiguriert. Auf Linux mit installiertem nftables wird zusätzlich die nftables-Syntax geprüft; lokal auf macOS entfällt diese Kernelprüfung.
+
+Die echte E2E-Matrix liegt unter `tests/proxmox_e2e*.yml`: Rocky und Debian, online und CD-ROM, SSH, Layout und gemeinsame HA-Regel. Sie wird nur über `make e2e` ausdrücklich gestartet. CD-ROM-Installation benötigt ein Medium mit dem vollständigen erforderlichen Paketbestand. Für Offline-Gäste zusätzliche Paketinstallation entsprechend deaktivieren.
+
+Vor produktiver Nutzung sind im Testcluster mindestens neue Installation, Wiederholung, Wiederaufnahme, explizite Neuinstallation, zentrale Gruppenänderung, VM-Gruppenzuordnung, Firewall-Zugriff aus erlaubten und gesperrten Netzen sowie beide Gastbetriebssysteme abzunehmen. Die E2E-Bereinigung prüft VM-Identität und Eigentumsmarkierungen; unveränderliche Remote-ISOs bleiben erhalten.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) beschreibt die Entwicklungsumgebung und die Make-Ziele. Die Fachtests laufen ohne produktive API-Zugriffe; echte Proxmox-E2E-Läufe sind separat und ausdrücklich zu starten.
+
+## CI und Releases
+
+Der neue Ausgangstag der Collection ist `v0.2.0`. Historische Tags ohne `v` wie `1.0.2` gehören zur früheren Standalone-Rolle und bleiben unverändert.
+
+GitHub ruft denselben Einstieg `bash tests/run_checks.sh` wie die lokale Entwicklung auf. Die Matrix verwendet Python 3.12 mit ansible-core 2.20 und 2.21. Actions sind auf Commit-SHAs festgelegt; Pull-Request-Workflows erhalten nur Leserechte.
+
+Ein Release wird ausschließlich durch einen zur `galaxy.yml`-Version passenden Tag `v<version>` ausgelöst und führt die Checks erneut aus. Das geprüfte Collection-Archiv wird als GitHub-Release-Artefakt bereitgestellt. Eine Galaxy-Publikation wird nicht automatisch ausgeführt.
+
+## Migration
+
+Die gemeinsame Controller-Basis wechselt von Python 3.11/ansible-core 2.19 auf Python 3.12/ansible-core >=2.20.10,<2.22. Bestehende Controller müssen vor dem Collection-Update angeglichen werden; die Gastbetriebssysteme werden dadurch nicht verändert. Details stehen in [docs/migration.md](docs/migration.md).
 
 Bestehende Inventories und der Rollenname bleiben nutzbar, wenn die Collection installiert ist. Named-Merges gelten weiter für die expliziten Legacy-Ebenen Defaults → Gruppe → Host → Playbook; Benutzer werden jetzt anhand ihres Namens zusammengeführt. Listen in der strukturierten Konfiguration sind dagegen vollständige Listen gemäß normaler Ansible-Variablenpriorität.
 
@@ -378,23 +419,12 @@ Bewusste Änderungen:
 
 Bei bisheriger Nutzung der unveröffentlichten Collection `lenmail.proxmox` die Rollen-, Modul- und Filteraufrufe auf `degitag.proxmox` sowie Collection-Abhängigkeiten umstellen. Der Legacy-Rollenname `proxmox_automatic` bleibt erhalten. Für dessen Auflösung außerhalb dieses Checkouts muss die installierte Collection zusätzlich im Rollenpfad unter diesem Namen verlinkt sein; `make prepare` richtet dies nur für die lokale Entwicklung ein.
 
-## Entwicklung und Tests
+## Sicherheit
 
-```bash
-source .venv/bin/activate
-make ci
-make package-smoke
-```
+Secrets gehören in Ansible Vault oder einen externen Secret Store. Installer-Medien und Firewall-Journale enthalten betriebliche beziehungsweise sensible Daten; sie werden nicht mit der Collection ausgeliefert. [SECURITY.md](SECURITY.md) beschreibt vertrauliche Meldungen und die belegten Sicherheitsgrenzen.
 
-`make ci` umfasst Lint, Syntax, Python-Tests, Installer-/Firewall-Rendering und isolierte Medien-Fixtures inklusive Cache-Wiederholung. Die Medien-Fixture prüft Struktur und Bootkonfiguration; ihr Kernel/Initrd/BIOS-Stub ist absichtlich nicht bootfähig. Der GitHub-Workflow ist für Python 3.11 und 3.12 konfiguriert. Auf Linux mit installiertem nftables wird zusätzlich die nftables-Syntax geprüft; lokal auf macOS entfällt diese Kernelprüfung.
+## Lizenz
 
-Die echte E2E-Matrix liegt unter `tests/proxmox_e2e*.yml`: Rocky und Debian, online und CD-ROM, SSH, Layout und gemeinsame HA-Regel. Sie wird nur über `make e2e` ausdrücklich gestartet. CD-ROM-Installation benötigt ein Medium mit dem vollständigen erforderlichen Paketbestand. Für Offline-Gäste zusätzliche Paketinstallation entsprechend deaktivieren.
+[MIT](LICENSE). Enthaltene Rollen und Module behalten ihre vorhandenen Lizenzangaben.
 
-Vor produktiver Nutzung sind im Testcluster mindestens neue Installation, Wiederholung, Wiederaufnahme, explizite Neuinstallation, zentrale Gruppenänderung, VM-Gruppenzuordnung, Firewall-Zugriff aus erlaubten und gesperrten Netzen sowie beide Gastbetriebssysteme abzunehmen. Die E2E-Bereinigung prüft VM-Identität und Eigentumsmarkierungen; unveränderliche Remote-ISOs bleiben erhalten.
-
-## Weitere Dokumentation
-
-- [Variablenreferenz](VARIABLES.md), [Entwicklung und Abnahme](CONTRIBUTING.md), [Changelog](CHANGELOG.md), [Sicherheit](SECURITY.md)
-- [Eigenständiges Firewall-Beispiel](examples/firewall.yml), [Metrikserver-Rolle](roles/metric_server/README.md)
-- [Betriebsdokumentation in Lenmail-Outline](https://docs.lenmail.de/doc/ansible-proxmox-refactoring-und-zentrale-firewall-policies-DGBs0T8Jbq)
-- Lizenz: [MIT](LICENSE)
+Betriebsdokumentation: [Lenmail-Outline](https://docs.lenmail.de/doc/ansible-proxmox-refactoring-und-zentrale-firewall-policies-DGBs0T8Jbq). Weitere Referenzen: [Variablen](VARIABLES.md), [Changelog](CHANGELOG.md), [Firewall-Beispiel](examples/firewall.yml), [Metrikserver](roles/metric_server/README.md).

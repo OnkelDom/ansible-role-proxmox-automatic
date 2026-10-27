@@ -2,7 +2,7 @@
 - name: Verify central firewall configuration is consistent within each cluster
   ansible.builtin.assert:
     that:
-      - hostvars[item]._proxmox_config.cluster_firewall == _proxmox_config.cluster_firewall
+    - hostvars[item]._proxmox_config.cluster_firewall == _proxmox_config.cluster_firewall
     fail_msg: Central firewall configuration must be identical for all hosts using the same API host
   loop: "{{ ansible_play_hosts }}"
   when: hostvars[item]._proxmox_config.api.host == _proxmox_config.api.host

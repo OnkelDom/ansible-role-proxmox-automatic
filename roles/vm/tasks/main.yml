@@ -64,8 +64,8 @@
   ansible.builtin.pause:
     seconds: "{{ _proxmox_config.legacy.create_vm_pause }}"
   when:
-    - _proxmox_vm_created.changed | default(false)
-    - not ansible_check_mode
+  - _proxmox_vm_created.changed | default(false)
+  - not ansible_check_mode
 
 - name: Prepare installation media and boot order
   degitag.proxmox.vm_lifecycle:
@@ -116,32 +116,32 @@
 
 - name: Complete explicit reinstallation across a cold boot
   when:
-    - _proxmox_config.deploy.reinstall | bool
-    - _proxmox_config.deploy.wait_for_install | bool
-    - not ansible_check_mode
+  - _proxmox_config.deploy.reinstall | bool
+  - _proxmox_config.deploy.wait_for_install | bool
+  - not ansible_check_mode
   block:
-    - name: Wait for installer to power off the reinstalled VM
-      degitag.proxmox.vm_lifecycle:
-        api: "{{ _proxmox_config.api }}"
-        vmid: "{{ _proxmox_config.vm.vmid }}"
-        name: "{{ _proxmox_config.vm.name }}"
-        node: "{{ _proxmox_config.vm.node }}"
-      delegate_to: localhost
-      register: _proxmox_reinstall_state
-      until: _proxmox_reinstall_state.status == 'stopped'
-      retries: "{{ ((_proxmox_config.deploy.install_timeout | int) / 5) | round(0, 'ceil') | int }}"
-      delay: 5
+  - name: Wait for installer to power off the reinstalled VM
+    degitag.proxmox.vm_lifecycle:
+      api: "{{ _proxmox_config.api }}"
+      vmid: "{{ _proxmox_config.vm.vmid }}"
+      name: "{{ _proxmox_config.vm.name }}"
+      node: "{{ _proxmox_config.vm.node }}"
+    delegate_to: localhost
+    register: _proxmox_reinstall_state
+    until: _proxmox_reinstall_state.status == 'stopped'
+    retries: "{{ ((_proxmox_config.deploy.install_timeout | int) / 5) | round(0, 'ceil') | int }}"
+    delay: 5
 
-    - name: Start reinstalled system with disk boot order applied
-      community.proxmox.proxmox_kvm:
-        api_host: "{{ _proxmox_config.api.host }}"
-        api_user: "{{ _proxmox_config.api.user }}"
-        api_password: "{{ _proxmox_config.api.password or omit }}"
-        api_token_id: "{{ _proxmox_config.api.token_id or omit }}"
-        api_token_secret: "{{ _proxmox_config.api.token_secret or omit }}"
-        validate_certs: "{{ _proxmox_config.api.validate_certs }}"
-        node: "{{ _proxmox_reinstall_state.node }}"
-        vmid: "{{ _proxmox_config.vm.vmid }}"
-        state: started
-      delegate_to: localhost
-      no_log: true
+  - name: Start reinstalled system with disk boot order applied
+    community.proxmox.proxmox_kvm:
+      api_host: "{{ _proxmox_config.api.host }}"
+      api_user: "{{ _proxmox_config.api.user }}"
+      api_password: "{{ _proxmox_config.api.password or omit }}"
+      api_token_id: "{{ _proxmox_config.api.token_id or omit }}"
+      api_token_secret: "{{ _proxmox_config.api.token_secret or omit }}"
+      validate_certs: "{{ _proxmox_config.api.validate_certs }}"
+      node: "{{ _proxmox_reinstall_state.node }}"
+      vmid: "{{ _proxmox_config.vm.vmid }}"
+      state: started
+    delegate_to: localhost
+    no_log: true

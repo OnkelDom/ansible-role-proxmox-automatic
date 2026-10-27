@@ -4,4 +4,4 @@
   hosts: proxmox_clusters
   gather_facts: false
   roles:
-    - degitag.proxmox.cluster_resources
+  - degitag.proxmox.cluster_resources

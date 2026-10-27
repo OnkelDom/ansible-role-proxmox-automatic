@@ -5,8 +5,8 @@
     state: present
     use: "{{ _proxmox_guest_facts.ansible_facts.ansible_pkg_mgr }}"
   when:
-    - _proxmox_config.guest.manage_packages | bool
-    - _proxmox_config.guest.packages | length > 0
+  - _proxmox_config.guest.manage_packages | bool
+  - _proxmox_config.guest.packages | length > 0
 
 - name: Ensure explicitly requested primary groups exist
   ansible.builtin.group:
@@ -17,9 +17,9 @@
   loop_control:
     label: "{{ item.name }}"
   when:
-    - _proxmox_config.guest.manage_users | bool
-    - item.state | default('present') == 'present'
-    - item.gid is defined
+  - _proxmox_config.guest.manage_users | bool
+  - item.state | default('present') == 'present'
+  - item.gid is defined
 
 - name: Manage guest accounts
   ansible.builtin.user:
@@ -47,9 +47,9 @@
   loop_control:
     label: "{{ item.name }}"
   when:
-    - _proxmox_config.guest.manage_users | bool
-    - item.state | default('present') == 'present'
-    - item.ssh_key | default('') | length > 0 or item.additional_ssh_keys | default([]) | length > 0
+  - _proxmox_config.guest.manage_users | bool
+  - item.state | default('present') == 'present'
+  - item.ssh_key | default('') | length > 0 or item.additional_ssh_keys | default([]) | length > 0
   no_log: true
 
 - name: Manage validated sudo policy
@@ -66,9 +66,9 @@
   loop_control:
     label: "{{ item.name }}"
   when:
-    - _proxmox_config.guest.manage_users | bool
-    - item.state | default('present') == 'present'
-    - item.sudo_commands is defined
+  - _proxmox_config.guest.manage_users | bool
+  - item.state | default('present') == 'present'
+  - item.sudo_commands is defined
 
 - name: Remove obsolete managed sudo policy
   ansible.builtin.file:
@@ -78,8 +78,8 @@
   loop_control:
     label: "{{ item.name }}"
   when:
-    - _proxmox_config.guest.manage_users | bool
-    - item.state | default('present') == 'absent' or item.sudo_commands is not defined
+  - _proxmox_config.guest.manage_users | bool
+  - item.state | default('present') == 'absent' or item.sudo_commands is not defined
 
 - name: Apply explicit guest sysctl values
   ansible.posix.sysctl:

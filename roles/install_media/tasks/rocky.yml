@@ -5,8 +5,8 @@
     state: directory
     mode: "0700"
   loop:
-    - "{{ _proxmox_config.install.files_dir }}"
-    - "{{ _proxmox_config.install.iso_dir }}"
+  - "{{ _proxmox_config.install.files_dir }}"
+  - "{{ _proxmox_config.install.iso_dir }}"
   delegate_to: localhost
 
 - name: "Create kickstart file"
@@ -34,22 +34,22 @@
 - name: Build changed installer media
   when: _proxmox_media_rebuild | bool and not ansible_check_mode
   block:
-    - name: "Create ISO file"
-      ansible.builtin.command:
-        argv:
-          - xorriso
-          - -as
-          - mkisofs
-          - -o
-          - "{{ _proxmox_config.install.iso_dir }}/{{ _proxmox_media_backend_generated_iso_name }}.iso"
-          - -V
-          - "{{ _proxmox_media_backend_generated_iso_name | upper | regex_replace('[^A-Z0-9_]', '_') }}"
-          - -J
-          - -R
-          - -graft-points
-          - "ks.cfg={{ _proxmox_config.install.files_dir }}/ks-{{ _proxmox_config.vm.name }}.cfg"
-      delegate_to: localhost
-      changed_when: true
+  - name: "Create ISO file"
+    ansible.builtin.command:
+      argv:
+      - xorriso
+      - -as
+      - mkisofs
+      - -o
+      - "{{ _proxmox_config.install.iso_dir }}/{{ _proxmox_media_backend_generated_iso_name }}.iso"
+      - -V
+      - "{{ _proxmox_media_backend_generated_iso_name | upper | regex_replace('[^A-Z0-9_]', '_') }}"
+      - -J
+      - -R
+      - -graft-points
+      - "ks.cfg={{ _proxmox_config.install.files_dir }}/ks-{{ _proxmox_config.vm.name }}.cfg"
+    delegate_to: localhost
+    changed_when: true
 
 
 - name: Publish installer artifact

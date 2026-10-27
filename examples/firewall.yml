@@ -10,24 +10,24 @@
       validate_certs: true
     proxmox_cluster_firewall:
       ipsets:
-        - name: management
-          cidrs:
-            - cidr: 192.0.2.0/24
+      - name: management
+        cidrs:
+        - cidr: 192.0.2.0/24
       groups:
-        - name: management
-          rules:
-            - name: ssh
-              action: ACCEPT
-              source: +management
-              proto: tcp
-              dport: '22'
-        - name: webserver
-          rules:
-            - name: https
-              action: ACCEPT
-              proto: tcp
-              dport: '443'
+      - name: management
+        rules:
+        - name: ssh
+          action: ACCEPT
+          source: +management
+          proto: tcp
+          dport: '22'
+      - name: webserver
+        rules:
+        - name: https
+          action: ACCEPT
+          proto: tcp
+          dport: '443'
       # No change to host rules, global activation or default policies.
       options: {}
   roles:
-    - degitag.proxmox.cluster_resources
+  - degitag.proxmox.cluster_resources

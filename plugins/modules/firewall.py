@@ -13,6 +13,8 @@ description:
   - Preserves foreign rules and uses stable names in ownership comments.
   - Never changes node firewall settings.
 author: Lenmail Maintainers
+requirements:
+  - requests
 options:
   api:
     type: dict
@@ -40,15 +42,15 @@ options:
 EXAMPLES = r'''
 - name: Define shared policies
   degitag.proxmox.firewall:
-    api: "{{ proxmox_api }}"
+    api: '{{ proxmox_api }}'
     config:
       groups:
-        - name: management
-          rules:
-            - name: ssh
-              source: +management
-              proto: tcp
-              dport: '22'
+      - name: management
+        rules:
+        - name: ssh
+          source: +management
+          proto: tcp
+          dport: '22'
 '''
 RETURN = r'''
 changed:

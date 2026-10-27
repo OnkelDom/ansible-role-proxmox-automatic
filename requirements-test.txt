@@ -1,0 +1,8 @@
+ansible-core>=2.20.10,<2.22
+ansible-lint>=26.10,<27
+pytest>=9,<10
+PyYAML>=6.0.3,<7
+ruamel.yaml>=0.19,<0.20
+yamllint>=1.38,<2
+requests>=2.32,<3
+proxmoxer>=2.2,<3

@@ -1,0 +1,25 @@
+---
+# .ansible-lint
+
+profile: production
+supported_ansible_also:
+- 2.20.
+- 2.21.
+
+exclude_paths:
+- .ansible/
+- .collections/
+- .venv/
+- .cache/
+- .ci-roles/
+- examples/roles/
+- .e2e-live/
+
+skip_list:
+- yaml[line-length]    # We use yamllint for this
+  # Roles share a documented collection-wide proxmox_* API and private _proxmox_* context.
+- var-naming[no-role-prefix]
+- name[casing]         # Allow descriptive task names
+
+warn_list:
+- experimental         # Experimental features as warning

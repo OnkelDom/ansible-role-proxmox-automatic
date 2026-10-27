@@ -12,6 +12,8 @@ short_description: Upload content-addressed installer media and wait for complet
 description:
   - Names must contain a full SHA256 fingerprint to permit safe reuse.
 author: Lenmail Maintainers
+requirements:
+  - requests
 options:
   api:
     type: dict

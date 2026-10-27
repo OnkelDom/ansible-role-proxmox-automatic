@@ -5,9 +5,9 @@
 - name: Require an explicit migration or coexistence choice for existing firewalls
   ansible.builtin.assert:
     that:
-      - >-
-        (_proxmox_config.firewall.allow_other_firewalls | bool) or
-        ((ansible_facts.services[item] | default({})).state | default('stopped')) != 'running'
+    - >-
+      (_proxmox_config.firewall.allow_other_firewalls | bool) or
+      ((ansible_facts.services[item] | default({})).state | default('stopped')) != 'running'
     fail_msg: An existing firewall is active; migrate its policy or explicitly set allow_other_firewalls
   loop: [firewalld.service, ufw.service, nftables.service]
 

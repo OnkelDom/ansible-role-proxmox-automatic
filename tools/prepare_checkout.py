@@ -11,3 +11,8 @@ for relative in ('.collections/ansible_collections/degitag/proxmox', '.ci-roles/
     if link.exists() or link.is_symlink():
         raise SystemExit('Refusing to replace existing test path: ' + str(link))
     link.symlink_to(root, target_is_directory=True)
+
+# Remove only our own obsolete namespace alias, never an unrelated checkout.
+obsolete = root / '.collections/ansible_collections/lenmail/proxmox'
+if obsolete.is_symlink() and obsolete.resolve() == root:
+    obsolete.unlink()

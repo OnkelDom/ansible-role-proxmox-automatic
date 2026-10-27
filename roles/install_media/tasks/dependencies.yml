@@ -2,16 +2,16 @@
 - name: Read controller distribution without collecting environment variables
   ansible.builtin.setup:
     gather_subset:
-      - '!all'
-      - '!min'
-      - distribution
+    - '!all'
+    - '!min'
+    - distribution
   delegate_to: localhost
   register: _proxmox_controller_distribution
 
 - name: Validate supported controller operating system
   ansible.builtin.assert:
     that:
-      - _proxmox_controller_distribution.ansible_facts.ansible_os_family in ['RedHat', 'Debian', 'Suse', 'Archlinux', 'Darwin']
+    - _proxmox_controller_distribution.ansible_facts.ansible_os_family in ['RedHat', 'Debian', 'Suse', 'Archlinux', 'Darwin']
     fail_msg: Install xorriso and perl manually on this controller operating system
 
 - name: Refresh Debian controller package metadata

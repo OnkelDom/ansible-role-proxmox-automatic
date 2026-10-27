@@ -11,6 +11,8 @@ description:
   - Does not create or replace disks.
   - Completion removes only explicitly supplied installer drives.
 author: Lenmail Maintainers
+requirements:
+  - requests
 options:
   api:
     type: dict

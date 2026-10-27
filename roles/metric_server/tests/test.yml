@@ -4,4 +4,4 @@
   gather_facts: true
   become: true
   roles:
-    - degitag.proxmox.metric_server
+  - degitag.proxmox.metric_server

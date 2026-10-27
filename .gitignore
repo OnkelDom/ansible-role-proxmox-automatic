@@ -93,3 +93,7 @@ debian-13.3.0-amd64-netinst.iso
 
 .proxmox-firewall-backups/
 .e2e-live/
+
+# Shared collection development paths
+.venv*/
+.host-collection/

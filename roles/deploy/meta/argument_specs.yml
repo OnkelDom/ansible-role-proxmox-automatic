@@ -10,8 +10,8 @@ argument_specs:
       proxmox_automatic_installer_backend:
         type: str
         choices:
-          - rocky_kickstart
-          - debian13_preseed
+        - rocky_kickstart
+        - debian13_preseed
         description: Installer backend used to generate unattended installation media
       proxmox_automatic_files_dir:
         type: str
@@ -37,10 +37,9 @@ argument_specs:
       proxmox_automatic_install_source:
         type: str
         choices:
-          - online
-          - cdrom
-        description: Controls whether the installer should use online repositories or only the attached installation
-          media. Debian cdrom mode assumes the ISO already contains the required packages.
+        - online
+        - cdrom
+        description: Controls whether the installer should use online repositories or only the attached installation media. Debian cdrom mode assumes the ISO already contains the required packages.
       proxmox_automatic_kickstart_template:
         type: str
         description: Template used for the Rocky Kickstart configuration
@@ -84,8 +83,8 @@ argument_specs:
       proxmox_automatic_state:
         type: str
         choices:
-          - present
-          - absent
+        - present
+        - absent
         description: VM state
       proxmox_automatic_kvm:
         type: bool
@@ -225,9 +224,9 @@ argument_specs:
       proxmox_automatic_selinux_mode:
         type: str
         choices:
-          - enforcing
-          - permissive
-          - disabled
+        - enforcing
+        - permissive
+        - disabled
         description: SELinux mode
       proxmox_automatic_firewall_enabled:
         type: bool
@@ -291,8 +290,7 @@ argument_specs:
         description: Sysctl settings for better network performance
       proxmox_automatic_vm_pool:
         type: str
-        description: Optional pool where the VM will be registered. Pool is automatically created if it doesn't
-          exist.
+        description: Optional pool where the VM will be registered. Pool is automatically created if it doesn't exist.
       proxmox_automatic_create_vm_throttle:
         type: int
         description: Number of concurrent VM creations
@@ -331,8 +329,7 @@ argument_specs:
         description: HA rule name to assign the VM to (auto-generated if empty and ha_group_auto is true)
       proxmox_automatic_ha_group_nodes:
         type: str
-        description: Comma-separated list of nodes with priorities (e.g., 'node1:0,node2:1,node3:2') for the shared
-          HA rule
+        description: Comma-separated list of nodes with priorities (e.g., 'node1:0,node2:1,node3:2') for the shared HA rule
       proxmox_automatic_ha_group_restricted:
         type: bool
         description: If true, only resources in this HA rule can run on these nodes
@@ -342,10 +339,10 @@ argument_specs:
       proxmox_automatic_ha_state:
         type: str
         choices:
-          - started
-          - stopped
-          - disabled
-          - ignored
+        - started
+        - stopped
+        - disabled
+        - ignored
         description: Desired state of the HA resource
       proxmox_automatic_ha_max_restart:
         type: int

@@ -1,48 +1,33 @@
 ---
 dependencies: []
-
 galaxy_info:
-  author: Lenmail Maintainers <opensource@example.com>
+  author: Lenmail Maintainers
   company: Lenmail
-  description: Automatically create VMs on Proxmox VE with unattended Rocky Kickstart and Debian Preseed installers
+  description: Automatically create VMs on Proxmox VE with unattended Rocky Kickstart
+    and Debian Preseed installers
   galaxy_tags:
-    - proxmox
-    - virtualization
-    - automation
-    - kickstart
-    - vm
-    - infrastructure
-    - cloud
-    - linux
-    - rocky
-    - rhel
-    - os
-    - autoinstall
-    - kvm
-    - qemu
+  - proxmox
+  - virtualization
+  - automation
+  - kickstart
+  - vm
+  - infrastructure
+  - cloud
+  - linux
+  - rocky
+  - rhel
+  - os
+  - autoinstall
+  - kvm
+  - qemu
   license: MIT
-  min_ansible_version: '2.19'
+  min_ansible_version: '2.20'
   namespace: degitag
   platforms:
-    - name: EL
-      versions:
-        - '8'
-        - '9'
-    - name: Rocky
-      versions:
-        - all
-    - name: Fedora
-      versions:
-        - all
-    - name: Ubuntu
-      versions:
-        - focal
-        - jammy
-    - name: Debian
-      versions:
-        - bullseye
-        - bookworm
-    - name: MacOSX
-      versions:
-        - all
+  - name: EL
+    versions:
+    - '9'
+  - name: Debian
+    versions:
+    - trixie
   role_name: proxmox_automatic

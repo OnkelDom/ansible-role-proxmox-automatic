@@ -4,4 +4,4 @@
   ansible.builtin.import_role:
     name: degitag.proxmox.deploy
   tags:
-    - proxmox_automatic
+  - proxmox_automatic

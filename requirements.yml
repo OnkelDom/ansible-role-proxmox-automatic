@@ -1,0 +1,8 @@
+---
+collections:
+- name: community.general
+  version: '>=12.0.0,<14.0.0'
+- name: community.proxmox
+  version: '>=1.4.0,<3.0.0'
+- name: ansible.posix
+  version: '>=2.1.0,<3.0.0'

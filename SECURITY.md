@@ -1,157 +1,25 @@
-# Security Policy
+# Sicherheit
 
-## Supported Versions
+## Unterstützter Stand
 
-We provide security updates for the following versions:
+Sicherheitskorrekturen werden für den aktuellen Collection-Stand auf `main` entwickelt. Der frühere Standalone-Rollenname wird als Adapter erhalten; daraus ergibt sich keine Zusage zur Pflege aller historischen Rollen-Releases. Unterstützte Controller-Versionen stehen in `meta/runtime.yml` und der README.
 
-| Version | Supported          |
-| ------- | -------------------- |
-| 1.x.x   | :white_check_mark:   |
-| < 1.0   | :x:                  |
+## Vertrauliche Meldungen
 
-## Reporting Security Vulnerabilities
+Sicherheitslücken mit reproduzierbarem Beispiel und betroffener Version vertraulich an den Repository-Maintainer melden. Falls GitHub private Sicherheitsmeldungen für das Repository anbietet, diese verwenden. Keine produktiven Zugangsdaten, privaten Schlüssel, vollständigen Installer-Medien oder Firewall-Journale in öffentliche Issues hochladen. Rückmelde- und Behebungsfristen werden nicht pauschal zugesagt.
 
-If you find a security vulnerability in this project, please **do not report it via public issues**.
+## API, SSH und Geheimnisse
 
-Instead:
+API-Zugänge mit passenden, begrenzten Rechten verwenden. TLS-Zertifikatsprüfung ist standardmäßig aktiv; interne CAs gehören in den Truststore. Geheimnisse über Ansible Vault oder einen externen Secret Store zuführen. Die Collection deaktiviert keine SSH-Hostkey-Prüfung. Nach Neuinstallation neue Hostkeys über einen unabhängig authentifizierten Weg abgleichen.
 
-1. **Send email** to: [security@inframonks.de] (if available)
-2. **Or**: Create a private Security Advisory via GitHub
-3. **Or**: Contact the maintainers directly
+Installer-Konfigurationen und ISOs können Passwort-Hashes enthalten. Lokale Konfigurationen, ISOs und Manifeste werden mit `0600`, Arbeitsverzeichnisse mit `0700` angelegt. Firewall-Änderungsjournale enthalten betriebliche Ausgangszustände und geplante Operationen. Solche Dateien gehören weder ins Repository noch in das Collection-Paket. Remote-ISO-Retention muss anhand der tatsächlichen VM-Referenzen geplant werden.
 
-### What to Include in the Report
+## Grenzen bei Firewall und Neuinstallation
 
-- **Description** of the security vulnerability
-- **Steps to reproduce**
-- **Potential impact**
-- **Proposed solution** (if available)
-- **Your contact details** for follow-up questions
+Proxmox-API-Änderungen sind keine atomare Transaktion. Journale ermöglichen eine gezielte Wiederherstellung; es gibt keinen automatischen vollständigen Rollback. Restriktive Policies benötigen funktionierende Management-Ausnahmen und einen vorbereiteten Rückweg.
 
-### What Happens Next?
+`reinstall: true` erlaubt eine Neuinstallation und Neupartitionierung der konfigurierten Gastdisks. Die VM muss vorher bewusst gestoppt sein; Datenbackup und Wiederherstellungsweg gehören zur Betriebsfreigabe. Check-Mode simuliert keine vollständige Betriebssysteminstallation.
 
-1. **Confirmation** within 48 hours
-2. **Initial assessment** within 7 days
-3. **Develop fix** depending on severity
-4. **Coordinated release** of the fix
-5. **Credit** for the reporter (if desired)
+## Belegte Aussagen
 
-## Security Best Practices
-
-### For Role Users
-
-```yaml
-# ✅ Secure configuration
-- name: Secure VM creation
-  vars:
-    # Use Ansible Vault for sensitive data
-    proxmox_automatic_api_password: "{{ vault_proxmox_password }}"
-    
-    # Enable firewall
-    proxmox_automatic_firewall_enabled: true
-    
-    # Keep SELinux enabled
-    proxmox_automatic_selinux_mode: "enforcing"
-    
-    # Strong SSH configuration
-    proxmox_automatic_users:
-      - name: admin
-        password: "{{ vault_admin_password }}"
-        ssh_key: "{{ vault_admin_ssh_key }}"
-        sudo_nopasswd: false  # Require password for sudo
-```
-
-### Sensitive Data
-
-**❌ Never in plaintext:**
-```yaml
-# WRONG - passwords in plaintext
-proxmox_automatic_api_password: "example-password"
-proxmox_automatic_users:
-  - name: admin
-    password: "example-password"
-```
-
-**✅ Use Ansible Vault:**
-```bash
-# Create vault file
-ansible-vault create group_vars/all/vault.yml
-
-# Content of vault.yml:
-vault_proxmox_password: "secure-password"
-vault_admin_password: "$6$rounds=656000$..."  # mkpasswd --method=sha-512
-```
-
-### API Security
-
-- Create **dedicated API users** with minimal rights
-- Use **token-based authentication** when possible
-- **Network restrictions** for API access
-- **Regular rotation** of API credentials
-
-### VM Security
-
-```yaml
-# Recommended security settings
-proxmox_automatic_firewall_enabled: true
-proxmox_automatic_selinux_mode: "enforcing"
-proxmox_automatic_firewall_services:
-  - "ssh"
-  # Only open required services
-
-# Secure SSH configuration
-proxmox_automatic_users:
-  - name: ansible
-    ssh_key: "{{ vault_ansible_ssh_key }}"
-    sudo_nopasswd: true   # Only for service accounts
-  - name: admin
-    ssh_key: "{{ vault_admin_ssh_key }}"
-    sudo_nopasswd: false  # Humans need password
-```
-
-## Known Security Considerations
-
-### Kickstart Files
-
-- Kickstart files may contain sensitive information
-- Temporarily stored on the Ansible Controller
-- Automatic cleanup after VM creation recommended
-
-### ISO Files
-
-- Contain kickstart configuration
-- Uploaded to Proxmox storage
-- Should be deleted after installation
-
-### Network Security
-
-```yaml
-# Example: Isolated networks
-proxmox_automatic_networks:
-  - name: net0  # Management (restricted access)
-    vlanid: 100
-    ip: "192.168.100.10"
-    
-  - name: net1  # Production (isolated)
-    vlanid: 200
-    ip: "10.0.200.10"
-```
-
-## Compliance
-
-This role supports the following security standards:
-
-- **CIS Benchmarks** - Secure basic configuration
-- **NIST Cybersecurity Framework** - Through configurable security settings
-- **BSI IT-Grundschutz** - German security standards
-
-## Updates and Patches
-
-- **Critical security vulnerabilities**: Patch within 24-48h
-- **Important security vulnerabilities**: Patch within 7 days
-- **Low security vulnerabilities**: With next regular release
-
-## Contact
-
-- **Security issues**: [security@inframonks.de] (if available)
-- **General questions**: GitHub Issues
-- **Discussions**: GitHub Discussions
+Lokale und GitHub-Prüfungen umfassen Repository-Struktur, Syntax, isolierte API-Tests, Firewall-/Installer-Rendering und nicht bootfähige Medien-Fixtures. Sie sind keine vollständige Sicherheitsprüfung eines Proxmox-Clusters. CIS-, BSI- oder NIST-Konformität und eine erfolgreiche Live-Abnahme werden daraus nicht abgeleitet. Produktive Änderungen und echte E2E-Läufe sind eigene, ausdrücklich beauftragte Betriebsaktionen.

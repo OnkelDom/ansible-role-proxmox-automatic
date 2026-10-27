@@ -11,6 +11,8 @@ short_description: Reconcile shared Proxmox HA node affinity rules without remov
 description:
   - Reads existing resources and unions them with requested members.
 author: Lenmail Maintainers
+requirements:
+  - requests
 options:
   api:
     type: dict

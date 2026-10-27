@@ -12,8 +12,8 @@ argument_specs:
         default: present
         description: state
         choices:
-          - present
-          - absent
+        - present
+        - absent
       proxmox_metric_server_host:
         type: str
         default: ''
@@ -27,8 +27,8 @@ argument_specs:
         default: https
         description: protocol
         choices:
-          - https
-          - http
+        - https
+        - http
       proxmox_metric_server_path:
         type: str
         default: /v1/metrics
