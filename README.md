@@ -1,6 +1,10 @@
 # `degitag.proxmox`
 
-[![CI](https://github.com/OnkelDom/ansible-role-proxmox-automatic/actions/workflows/ci.yml/badge.svg)](https://github.com/OnkelDom/ansible-role-proxmox-automatic/actions/workflows/ci.yml)
+[![CI](https://github.com/degitag/ansible-role-proxmox-automatic/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/degitag/ansible-role-proxmox-automatic/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/degitag/ansible-role-proxmox-automatic)](https://github.com/degitag/ansible-role-proxmox-automatic/releases)
+[![Tag](https://img.shields.io/github/v/tag/degitag/ansible-role-proxmox-automatic?sort=date)](https://github.com/degitag/ansible-role-proxmox-automatic/tags)
+![Ansible Core](https://img.shields.io/badge/ansible--core-2.20%20%7C%202.21-blue)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 Ansible-Collection für unbeaufsichtigte Rocky-Linux- und Debian-Installationen auf Proxmox VE, zentrale Firewall-Regeln und optionale Gastkonfiguration. Der bisherige Rollenname `proxmox_automatic` bleibt als Kompatibilitätseinstieg erhalten.
 
@@ -33,7 +37,7 @@ TLS-Zertifikatsprüfung ist standardmäßig aktiv. Eine interne CA gehört in de
 Die Collection wird aus diesem Repository gebaut. Die folgenden Befehle benötigen kein auf Galaxy veröffentlichtes Release:
 
 ```bash
-git clone https://github.com/OnkelDom/ansible-role-proxmox-automatic.git
+git clone https://github.com/degitag/ansible-role-proxmox-automatic.git
 cd ansible-role-proxmox-automatic
 python3.12 -m venv .venv
 source .venv/bin/activate

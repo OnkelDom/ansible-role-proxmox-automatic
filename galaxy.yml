@@ -12,7 +12,7 @@ tags:
 - proxmox
 - infrastructure
 - linux
-repository: https://github.com/OnkelDom/ansible-role-proxmox-automatic
+repository: https://github.com/degitag/ansible-role-proxmox-automatic
 dependencies:
   community.proxmox: '>=1.4.0,<3.0.0'
   community.general: '>=12.0.0,<14.0.0'
@@ -60,6 +60,6 @@ build_ignore:
 - docs
 - roles/*/tests
 - roles/*/molecule
-documentation: https://github.com/OnkelDom/ansible-role-proxmox-automatic#readme
-homepage: https://github.com/OnkelDom/ansible-role-proxmox-automatic
-issues: https://github.com/OnkelDom/ansible-role-proxmox-automatic/issues
+documentation: https://github.com/degitag/ansible-role-proxmox-automatic#readme
+homepage: https://github.com/degitag/ansible-role-proxmox-automatic
+issues: https://github.com/degitag/ansible-role-proxmox-automatic/issues
